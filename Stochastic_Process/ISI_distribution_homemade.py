@@ -1,11 +1,9 @@
 """
 # coding: utf-8
 @author: Yuhao Zhang
-last updated: 02/19/2025
+last updated: 02/27/2025
 data from: Xinchao Chen
 """
-import neo
-import quantities as pq
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -14,21 +12,29 @@ from scipy.stats import expon
 np.set_printoptions(threshold=np.inf)
 np.seterr(divide='ignore',invalid='ignore')
 
-### path
+# ------- NEED CHANGE -------
+### Basic information
 mice_name = '20230602_Syt2_conditional_tremor_mice2_lateral'
-main_path = r'E:\xinchao\Data\useful_data\20230602_Syt2_conditional_tremor_mice2_lateral\Sorted\Easysort\20230523_Syt2_449_3_Day60_g0'
-save_path = r'C:\Users\zyh20\Desktop\Research\01_ET_data analysis\Research\ISI_distribution\Easysort&QC\20230602_Syt2_conditional_tremor_mice2_lateral\Lobule III\WithoutQC'
+region_name = 'Lobule III'
+QC_method = 'WithoutQC'  # WithoutQC/ISI_violation/Amplitude_cutoff
+Sorting_method = 'Easysort'
+trial_type = 'stop'      #'stop' 'run'  run trials or stop trials
+plot_mode = 'overlap'    #'each_n_t' 'overlap'
+mice_type = 'cond_ET'    #'PV_Syt2'  'littermate' 'cond_ET'
 
-### marker
-treadmill = pd.read_csv(r'E:\xinchao\Data\useful_data\20230602_Syt2_conditional_tremor_mice2_lateral\Marker\treadmill_move_stop_velocity.csv',index_col=0)
+# ------- NO NEED CHANGE -------
+### path
+sorting_path = rf'E:\xinchao\Data\useful_data\{mice_name}\Sorted\Easysort\results_KS2\sorter_output'
+save_path = rf'C:\Users\zyh20\Desktop\Research\01_ET_data_analysis\Research\ISI_distribution\{Sorting_method}\{mice_name}\{region_name}\{QC_method}'  
+treadmill = pd.read_csv(rf'E:\xinchao\Data\useful_data\{mice_name}\Marker\treadmill_move_stop_velocity.csv',index_col=0)
 print(treadmill)
 
 ### electrophysiology
 sample_rate=30000 #spikeGLX neuropixel sample rate
-identities = np.load(main_path+'/results_KS2/sorter_output/spike_clusters.npy') #存储neuron的编号id,对应phy中的第一列id
-times = np.load(main_path+'/results_KS2/sorter_output/spike_times.npy')  #
-channel = np.load(main_path+'/results_KS2/sorter_output/channel_positions.npy')
-neurons = pd.read_csv(main_path+'/region_neuron_id.csv', low_memory = False,index_col=0)#防止弹出警告
+identities = np.load(sorting_path+'/spike_clusters.npy') #存储neuron的编号id,对应phy中的第一列id
+times = np.load(sorting_path+'/spike_times.npy')  #
+channel = np.load(sorting_path+'/channel_positions.npy')
+neurons = pd.read_csv(sorting_path+'/region_neuron_id.csv', low_memory = False,index_col=0)#防止弹出警告
 print(neurons)
 print("检查treadmill总时长和电生理总时长是否一致")
 print("电生理总时长")
@@ -37,15 +43,11 @@ print("跑步机总时长")
 print(treadmill['time_interval_right_end'].iloc[-1])
 neuron_num = neurons.count().transpose().values
 
+### ISI parameters
 fr_filter = 1 # 滤掉fr小于1spike/s
 fr_fil = 30/fr_filter
 cutoff_distr = 0.25 # cutoff_distr=0.25代表截断ISI分布大于0.25s的, cutoff_distr=None代表不截断
 histo_bin_num = 100
-
-trial_type = 'stop'      #'stop' 'run'  run trials or stop trials
-plot_mode = 'overlap'    #'each_n_t' 'overlap'
-mice_type = 'cond_ET'    #'PV_Syt2'  'littermate' 'cond_ET'
-region_name = 'Lobule III'
 
 # get single neuron spike train
 def singleneuron_spiketrain(id):

@@ -1,71 +1,46 @@
 """
 # coding: utf-8
 @author: Yuhao Zhang
-last updated: 06/30/2024
+last updated: 03/01/2025
 data from: Xinchao Chen
 """
-from scipy.fft import fft, fftfreq
+from scipy.fft import fft, fftfreq  
 from scipy import signal
-
-import torch
 import numpy as np
 import pandas as pd
-import pynapple as nap
-import pynacollada as pyna
 import matplotlib.pyplot as plt
-import matplotlib.animation as animation
 import seaborn as sns 
-import csv
-import os
 from scipy.signal import spectrogram
-from itertools import count
-from sklearn.manifold import TSNE
-from sklearn.manifold import Isomap
-from sklearn.datasets import load_iris,load_digits
-from sklearn.decomposition import PCA
-from matplotlib.colors import hsv_to_rgb
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-from math import log
-from sklearn.mixture import GaussianMixture
-from scipy.stats import norm
 import seaborn as sns
-import warnings
-import scipy.io as sio
 np.set_printoptions(threshold=np.inf)
-from mpl_toolkits.mplot3d import Axes3D
-from scipy.interpolate import interp1d
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-fig_save_path = r'C:\Users\zyh20\Desktop\ET_data analysis\LFP_frequence\20230113_littermate\Spinal vestibular nucleus'
-savepath_1 = fig_save_path + r'\trials\raw_tra&fq_spec\run'
-savepath_2 = fig_save_path + r'\trials\mainfq_phas_dif\run'
-savepath_3 = fig_save_path + r'\trials\raw_trace&fq_spec\stop'
-savepath_4 = fig_save_path + r'\trials\mainfq_phas_dif\stop'
-savepath_ch = fig_save_path + r'\trials\fq_spec_ch_overlay'
-savepath_trial = fig_save_path + r'\trials\fq_spec_trial_overlay'
-savepath_ch_trail = fig_save_path + r'\trials\fq_spec_ch_trail_overlay'
+# ------- NEED CHANGE -------
+mice_name = '20230113_littermate'
+LFP_file = '/Spinal vestibular nucleus_20230113_338_3_liteermate_female_stable_set_g0_t0.exported.imec0.lf.csv'
 
-savepath_9 = fig_save_path + r'\all_time\raw_trace&freq_spectrum'
-savepath_10 = fig_save_path + r'\all_time\main_freq_phase_diff'
-savepath_11 = fig_save_path + r'\all_time\freq_spectrum_overlay_ch'
+# ------- NO NEED CHANGE -------
+sample_rate = 2500 # 2,499.985345140265   #spikeGLX neuropixel LFP sample rate
+treadmill = pd.read_csv(rf'E:\xinchao\Data\useful_data\{mice_name}\Marker\treadmill_move_stop_velocity.csv',index_col=0)
+LFP = pd.read_csv(rf'E:\xinchao\Data\useful_data\{mice_name}\LFP' + LFP_file)
+region_name = LFP_file[1:]
+region_name = region_name.split('_')[0]
 
-### marker
-treadmill_marker_path = r'E:\xinchao\sorted neuropixels data\useful_data\20230113_littermate\data\marker'
-treadmill = pd.read_csv(treadmill_marker_path+'/treadmill_move_stop_velocity.csv',index_col=0)
+fig_path = rf'C:\Users\zyh20\Desktop\ET_data analysis\LFP_frequence\{mice_name}\{region_name}'
+savepath_1 = fig_path + r'\trials\raw_tra&fq_spec\run'
+savepath_2 = fig_path + r'\trials\mainfq_phas_dif\run'
+savepath_3 = fig_path + r'\trials\raw_trace&fq_spec\stop'
+savepath_4 = fig_path + r'\trials\mainfq_phas_dif\stop'
+savepath_ch = fig_path + r'\trials\fq_spec_ch_overlay'
+savepath_trial = fig_path + r'\trials\fq_spec_trial_overlay'
+savepath_ch_trail = fig_path + r'\trials\fq_spec_ch_trail_overlay'
 
-LFP_path = r'E:\xinchao\sorted neuropixels data\useful_data\20230113_littermate\data\LFP'
-filename='/Spinal vestibular nucleus_20230113_338_3_liteermate_female_stable_set_g0_t0.exported.imec0.lf.csv'
+savepath_9 = fig_path + r'\all_time\raw_trace&freq_spectrum'
+savepath_10 = fig_path + r'\all_time\main_freq_phase_diff'
+savepath_11 = fig_path + r'\all_time\freq_spectrum_overlay_ch'
 
-sample_rate = 2500 # 2,499.985345140265   #spikeGLX neuropixel sample rate
-
-LFP = pd.read_csv(LFP_path+filename)
 LFP = LFP.T
 LFP = LFP.to_numpy()
 LFP = LFP[:,800*sample_rate:2200*sample_rate]  # 截取800-2200s
-
-region_name=filename[1:]
-region_name=region_name.split('_')[0]
-
 print("检查treadmill总时长和LFP总时长是否一致")
 print("LFP总时长")
 print(LFP.shape[1]/sample_rate)
@@ -73,6 +48,8 @@ print("跑步机总时长")
 print(treadmill['time_interval_right_end'].iloc[-1])
 print(LFP.shape)
 
+# ------- FUNCTIONS -------
+#注意以下使用的函数 np.fft.fftfreq 中，1/sample_rate表示相邻样本之间的时间间隔,因此sample_rate必须是实际数据真实的采样率
 
 def freq_heat_map(times,frequencies,Sxx,state,m):
     # 频谱热图
@@ -82,7 +59,7 @@ def freq_heat_map(times,frequencies,Sxx,state,m):
     plt.ylabel('Frequency [Hz]')
     plt.xlabel('Time [s]')
     plt.title(f'{region_name}_{state}_Channel{m}_Spectrogram')
-    plt.savefig(fig_save_path+f"/{region_name}_{state}_Channel{m}_Spectrogram.png")
+    plt.savefig(fig_path+f"/{region_name}_{state}_Channel{m}_Spectrogram.png")
     plt.clf()
 
 def raw_trace_signal(t,signal,state,m):
@@ -92,7 +69,7 @@ def raw_trace_signal(t,signal,state,m):
     plt.xlabel("Time [s]")
     plt.ylabel("Amplitude")
     plt.title(f"{region_name}_{state}_Channel{m}_Signal")
-    plt.savefig(fig_save_path+f"/{region_name}_{state}_Channel{m}_Signal.png")
+    plt.savefig(fig_path+f"/{region_name}_{state}_Channel{m}_Signal.png")
     plt.clf()
 
 def freq_expand(freq_vector,fft_result,state,m):
@@ -105,7 +82,7 @@ def freq_expand(freq_vector,fft_result,state,m):
     plt.ylabel('Amplitude')
     plt.title(f'{region_name}_{state}_Channel{m}_Frequency Spectrum')
     plt.grid()
-    plt.savefig(fig_save_path+f"/{region_name}_{state}_Channel{m}_Frequency Spectrum.png")
+    plt.savefig(fig_path+f"/{region_name}_{state}_Channel{m}_Frequency Spectrum.png")
     plt.clf()
 
 def phase_diff_main_freq(data,state,main_phases,main_freqs):
@@ -123,7 +100,7 @@ def phase_diff_main_freq(data,state,main_phases,main_freqs):
     plt.title(f"{region_name}_{state}_Normalized Nerual Phase Difference Matrix")
     plt.xlabel("LFP Channel")
     plt.ylabel("LFP Channel")
-    plt.savefig(fig_save_path+f"/{region_name}_{state}_phase_diff.png")
+    plt.savefig(fig_path+f"/{region_name}_{state}_phase_diff.png")
     plt.clf()
     #绘制不同通道主频率图
     indices = np.arange(len(main_freqs))
@@ -133,7 +110,7 @@ def phase_diff_main_freq(data,state,main_phases,main_freqs):
     plt.ylabel('Main frequence')
     plt.title(f'{region_name}_{state}_main_freq')
     plt.grid(True)
-    plt.savefig(fig_save_path+f"/{region_name}_{state}_main_freq.png")
+    plt.savefig(fig_path+f"/{region_name}_{state}_main_freq.png")
     plt.clf()
 
 def overlay_trial_freq_spetrum(fq_thre_low,fq_thre_high):
@@ -152,7 +129,7 @@ def overlay_trial_freq_spetrum(fq_thre_low,fq_thre_high):
             # 计算信号的傅里叶变换
             fft_result = np.fft.fft(ch_trail_LFP)
             # 计算频率向量
-            freq_vector = np.fft.fftfreq(len(ch_trail_LFP), 1/sample_rate)
+            freq_vector = np.fft.fftfreq(len(ch_trail_LFP), 1/sample_rate)  
             # 只选择正频率部分
             positive_freqs = freq_vector[:len(freq_vector)//2]
             positive_fft_result = np.abs(fft_result[:len(fft_result)//2])

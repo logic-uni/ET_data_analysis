@@ -1,53 +1,34 @@
 """
 # coding: utf-8
 @author: Yuhao Zhang
-last updated: 06/29/2024
+last updated: 03/03/2025
 data from: Xinchao Chen
 """
 #提取信号的相位
 from scipy.fft import fft, fftfreq
 from scipy import signal
-
-import torch
 import numpy as np
 import pandas as pd
-import pynapple as nap
-import pynacollada as pyna
 import matplotlib.pyplot as plt
-import matplotlib.animation as animation
-import seaborn as sns 
-import csv
-import os
-from itertools import count
-from sklearn.manifold import TSNE
-from sklearn.manifold import Isomap
 from sklearn.datasets import load_iris,load_digits
-from sklearn.decomposition import PCA
 from matplotlib.colors import hsv_to_rgb
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from math import log
-from sklearn.mixture import GaussianMixture
 from scipy.stats import norm
-import seaborn as sns
 import warnings
 import scipy.io as sio
 np.set_printoptions(threshold=np.inf)
-from mpl_toolkits.mplot3d import Axes3D
-from scipy.interpolate import interp1d
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-### marker
-treadmill_marker_path = r'E:\chaoge\sorted neuropixels data\20230523-condictional tremor1\20230523\raw\20230523_Syt2_449_1_Day50_g0'
-treadmill = pd.read_csv(treadmill_marker_path+'/treadmill_move_stop_velocity.csv',index_col=0)
-print(treadmill)
+# ------- NEED CHANGE -------
+mice_name = '20230604_Syt2_conditional_tremor_mice2_medial'
 
-### electrophysiology
-sample_rate=30000 #spikeGLX neuropixel sample rate
-file_directory=r'E:\chaoge\sorted neuropixels data\20230523-condictional tremor1\working\sorted'
-identities = np.load(file_directory+'/spike_clusters.npy') #存储neuron的编号id,对应phy中的第一列id
-times = np.load(file_directory+'/spike_times.npy')  #
-channel = np.load(file_directory+'/channel_positions.npy')
-neurons = pd.read_csv(file_directory+'/region_neuron_id.csv', low_memory = False,index_col=0)#防止弹出警告
+# ------- NO NEED CHANGE -------
+treadmill = pd.read_csv(rf'E:\xinchao\Data\useful_data\{mice_name}\Marker\treadmill_move_stop_velocity.csv',index_col=0)
+main_path = rf'E:\xinchao\Data\useful_data\{mice_name}\Sorted\Easysort'
+identities = np.load(main_path+'/results_KS2/sorter_output/spike_clusters.npy')  # 存储neuron的编号id,对应phy中的第一列id
+times = np.load(main_path+'/results_KS2/sorter_output/spike_times.npy')  # 存储全局所有neuron每个spike的时间戳
+neurons = pd.read_csv(main_path+'/region_neuron_id.csv', low_memory = False,index_col=0) # 防止弹出警告
+sample_rate = 30000  # spikeGLX neuropixel sample rate
 print(neurons)
 print("检查treadmill总时长和电生理总时长是否一致")
 print("电生理总时长")
@@ -269,4 +250,4 @@ def main_function(neurons,marker):
         t=np.arange(0,data.shape[1])
         signals = data
  
-main_function(neurons,treadmill)
+#main_function(neurons,treadmill)

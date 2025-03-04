@@ -5,36 +5,18 @@ last updated: 06/20/2024
 data from: Xinchao Chen
 """
 
-import torch
 import numpy as np
 import pandas as pd
-import pynapple as nap
-import pynacollada as pyna
 import matplotlib.pyplot as plt
-import matplotlib.animation as animation
-import seaborn as sns 
-import csv
-import os
 import numpy as np
-import scipy.stats as stats
-import warnings
-import scipy.io as sio
-import scipy.stats as stats
-from itertools import count
-from sklearn.manifold import TSNE
-from sklearn.manifold import Isomap
 from sklearn.datasets import load_iris,load_digits
 from sklearn.decomposition import PCA
 from matplotlib.colors import hsv_to_rgb
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from math import log
-from sklearn.mixture import GaussianMixture
 from scipy.stats import norm
 from scipy.signal import hilbert, butter, filtfilt
 from scipy.fftpack import fft,fftfreq,rfft,irfft,ifft
-from mpl_toolkits.mplot3d import Axes3D
-from scipy.interpolate import interp1d
-from itertools import combinations
 
 path = r'E:\chaoge\sorted neuropixels data\20230523-condictional tremor1\20230523\raw\20230523_Syt2_449_1_Day50_g0'
 marker = pd.read_csv(path+'/20230523_Syt2_449_1_Day50_g0_t0.exported.nidq.csv', encoding='utf-8',header=None)

@@ -4,23 +4,13 @@
 last updated: 08/21/2024
 data from: Xinchao Chen
 """
-import torch
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
 import warnings
-from matplotlib.animation import FuncAnimation, PillowWriter 
 from sklearn.metrics import pairwise_distances
-from sklearn.manifold import Isomap
-from sklearn.decomposition import PCA
-from sklearn.linear_model import LinearRegression
-from matplotlib import cm
-from scipy import interpolate
-from scipy.interpolate import interp1d
 from mayavi import mlab
 np.set_printoptions(threshold=np.inf)
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 mice = 'littermate'
 

@@ -4,24 +4,16 @@
 last updated: 11/15/2024
 data from: Xinchao Chen
 """
-import math
-import torch
 import neo
 import quantities as pq
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import random
 from matplotlib.pyplot import *
 from ast import literal_eval
-from sklearn.manifold import Isomap
-from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
 from elephant.conversion import BinnedSpikeTrain
-from elephant import statistics
 import matplotlib.pyplot as plt
-import seaborn as sns
-from mpl_toolkits.mplot3d import Axes3D
 import numba
 np.set_printoptions(threshold=np.inf)
 

@@ -9,7 +9,6 @@ import torch
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import warnings
 import quantities as pq
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from elephant.spike_train_generation import homogeneous_poisson_process

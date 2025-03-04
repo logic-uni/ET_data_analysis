@@ -7,27 +7,12 @@ data from: Xinchao Chen
 import torch
 import numpy as np
 import pandas as pd
-import pynapple as nap
-import pynacollada as pyna
 import matplotlib.pyplot as plt
-import matplotlib.animation as animation
-import seaborn as sns 
-import csv
-import os
-import scipy
-import random
-from scipy import stats
-from itertools import count
-from sklearn.manifold import TSNE
-from sklearn.manifold import Isomap
 from sklearn.datasets import load_iris,load_digits
-from sklearn.decomposition import PCA
 from matplotlib.colors import hsv_to_rgb
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from math import log
-from sklearn.mixture import GaussianMixture
 from scipy.stats import norm
-import seaborn as sns
 import warnings
 import scipy.io as sio
 np.set_printoptions(threshold=np.inf)

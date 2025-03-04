@@ -12,7 +12,6 @@ from viziphant.spike_train_correlation import plot_cross_correlation_histogram
 from elephant.spike_train_correlation import cross_correlation_histogram  # noqa
 from elephant.spike_train_synchrony import spike_contrast
 from elephant import statistics
-import torch
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt

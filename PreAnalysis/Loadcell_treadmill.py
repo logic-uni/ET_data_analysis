@@ -9,12 +9,10 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.signal import spectrogram
-from mpl_toolkits.mplot3d import Axes3D
 from scipy.signal import welch
 from scipy.signal import stft
 import pywt
 from scipy.signal import hilbert, chirp
-from mpl_toolkits.mplot3d import Axes3D
 from PyEMD import EMD
 import matplotlib.pyplot as plt
 import numpy as np

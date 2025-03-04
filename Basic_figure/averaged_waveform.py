@@ -7,17 +7,15 @@ data from: Xinchao Chen
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Load .npy file from a specified path
-same_portion = r'\waveforms\extensions\templates'
-main_path = r'E:\xinchao\Data\useful_data\20230623_Syt2_conditional_tremor_mice4\Sorted\Easysort\202300622_Syt2_512_2_Day18_P79_g0'+same_portion
-average = np.load(main_path+'/average.npy')  # Load average waveform, this is a 3D numpy array, shape: (251, 88, 384)
-median = np.load(main_path+'/median.npy')  # Load median waveform, this is a 3D numpy array, shape: (251, 88, 384)
-std = np.load(main_path+'/std.npy')  # Load standard deviation of waveform, this is a 3D numpy array, shape: (251, 88, 384)
-print(average.shape)
-
-waveform = average  # average/median/std  # choose a kind of computing mothod result to plot
+# ------- NEED CHANGE -------
+mice_name = '20230604_Syt2_conditional_tremor_mice2_medial'
 neurons_id = [50]  # interested neurons id
 channels_id = [2]  # interested channels id
+
+# ------- NO NEED CHANGE -------
+main_path = rf'E:\xinchao\Data\useful_data\{mice_name}\Sorted\Easysort\waveforms\extensions\templates'
+waveform = np.load(main_path+'/average.npy')  # Load average waveform, this is a 3D numpy array, shape: (251, 88, 384)
+print(waveform.shape)
 
 def channel_neurons(channel_id):
     chan_wav = waveform[:, :, channel_id]  # Extract each slice along the last dimension of the 3D numpy array

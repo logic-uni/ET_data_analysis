@@ -1,43 +1,40 @@
 """
 # coding: utf-8
 @author: Yuhao Zhang
-last updated: 08/14/2024
+last updated: 03/06/2025
 data from: Xinchao Chen
 """
-import neo
-import torch
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import warnings
-import quantities as pq
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-from elephant.spike_train_generation import homogeneous_poisson_process
-from viziphant.statistics import plot_isi_histogram
 np.set_printoptions(threshold=np.inf)
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-### path
-main_path = r'E:\xinchao\sorted neuropixels data\useful_data\20230602_Syt2_conditional_tremor_mice2_lateral\data'
-fig_save_path = r'C:\Users\zyh20\Desktop\ET_data analysis\ISI_distribution\20230602_Syt2_conditional_tremor_mice2_lateral'
+# ------- NEED CHANGE -------
+mice_name = '20230112_PVsyt2_tremor'
+mapping_file = 'unit_ch_dep_region_QC_isi_violations_ratio_pass_rate_63.98963730569948%.csv'
+QC_method = 'QC_ISI_violation'  # Without_QC/QC_ISI_violation
 
-### marker
-treadmill = pd.read_csv(main_path+'/marker/treadmill_move_stop_velocity.csv',index_col=0)
-print(treadmill)
-
+# ------- NO NEED CHANGE -------
+sorting_method = 'Easysort' 
+main_path = rf'E:\xinchao\Data\useful_data\{mice_name}\Sorted\Easysort'
+sorting_path = main_path + '/results_KS2/sorter_output'
+save_path = rf'C:\Users\zyh20\Desktop\Research\01_ET_data_analysis\Research\raster_plot\{sorting_method}\{QC_method}\{mice_name}'  
+treadmill = pd.read_csv(rf'E:\xinchao\Data\useful_data\{mice_name}\Marker\treadmill_move_stop_velocity_segm_trial.csv',index_col=0)
+treadmill_origin = pd.read_csv(rf'E:\xinchao\Data\useful_data\{mice_name}\Marker\treadmill_move_stop_velocity.csv',index_col=0)
 ### electrophysiology
-sample_rate=30000 #spikeGLX neuropixel sample rate
-identities = np.load(main_path+'/spike_train/spike_clusters.npy') #存储neuron的编号id,对应phy中的第一列id
-times = np.load(main_path+'/spike_train/spike_times.npy')  #
-channel = np.load(main_path+'/spike_train/channel_positions.npy')
-neurons = pd.read_csv(main_path+'/spike_train/region_neuron_id.csv', low_memory = False,index_col=0)#防止弹出警告
+sample_rate = 30000 #spikeGLX neuropixel sample rate
+identities = np.load(sorting_path + '/spike_clusters.npy') # time series: unit id of each spike
+times = np.load(sorting_path + '/spike_times.npy')  # time series: spike time of each spike
+neurons = pd.read_csv(main_path + f'/mapping/{mapping_file}')
 print(neurons)
-print("检查treadmill总时长和电生理总时长是否一致")
-print("电生理总时长")
-print((times[-1]/sample_rate)[0])
-print("跑步机总时长") 
-print(treadmill['time_interval_right_end'].iloc[-1])
-neuron_num = neurons.count().transpose().values
+print("Test if electrophysiology duration is equal to treadmill duration ...")
+elec_dura = (times[-1]/sample_rate)[0]
+treadmill_dura = treadmill_origin['time_interval_right_end'].iloc[-1]
+print(f"Electrophysiology duration: {elec_dura}")
+print(f"Treadmill duration: {treadmill_dura}")
 
 #### spike train & firing rates
 # get single neuron spike train
@@ -229,13 +226,14 @@ def raster_plot_neurons(spike_times,id):
     plt.show()
 
 # plot single neuron spike train
-def raster_plot_singleneuron(spike_times):
+def raster_plot_singleneuron(spike_times,region,unit_id,trial_type):
     y=np.empty(len(spike_times))      
     plt.plot(spike_times,y, '|', color='gray') 
     plt.title('neuron 15') 
     plt.xlabel("time") 
     plt.xlim(0,t)
-    plt.show()
+    plt.savefig(save_path+f"/{region}_neuron_{unit_id}_{trial_type}.png",dpi=600,bbox_inches = 'tight')
+    plt.clf()
 
 # plot neurons around id spike train
 def raster_plot_neurons(spike_times,id): 
@@ -252,7 +250,6 @@ def raster_plot_neurons(spike_times,id):
 
 # PETH: peri-event time histogram  事件周围时间直方图
 def PETH_singleneuron(firing_rate,duration):
-
     plt.rcParams['xtick.direction'] = 'in'#将x轴的刻度线方向设置向内
     plt.rcParams['ytick.direction'] = 'in'#将y轴的刻度线方向设置向内
     plt.plot(firing_rate)
@@ -267,7 +264,6 @@ def PETH_singleneuron(firing_rate,duration):
 def PETH_heatmap_1(data): #未调试
     mean_histograms = data.mean(dim="stimulus_presentation_id")
     print(mean_histograms)
-
     # plot
     fig, ax = plt.subplots(figsize=(8, 8))
     c = ax.pcolormesh(
@@ -284,7 +280,6 @@ def PETH_heatmap_1(data): #未调试
     plt.show()
 
 def PETH_heatmap_2(data,id):  #已调试
-
     data_minus_mean=data-np.mean(data)
     # plot
     fig, ax = plt.subplots(figsize=(12, 12))
@@ -311,15 +306,12 @@ def PETH_heatmap_2(data,id):  #已调试
     plt.show()
 
 def PETH_heatmap_shorttime(data,id):
-
     t0=-0.3
     t1=0.5
     #data_logtrans=np.log2(data+1)
     #data_minus_mean=data_logtrans-2.2
     data_minus_mean=data-np.median(data)
-
     print(data_minus_mean)
-
     # plot
     fig, ax = plt.subplots(figsize=(12, 12))
     div = make_axes_locatable(ax)
@@ -343,3 +335,16 @@ def PETH_heatmap_shorttime(data,id):
     ax.set_xlabel('Time(s) Move: 0s', fontsize=20)
     ax.set_title('Spike Counts Neuron id %d'%id, fontsize=20)
     plt.show()
+
+def main(units,trial_type):
+    plt.figure(figsize=(10, 6))
+    for index, row in units.iterrows():
+        unit_id = row['cluster_id']
+        region_name = row['region']
+        spike_times = singleneuron_spiketrain(unit_id)
+        if trial_type == 'stoptrials':
+            trials = treadmill[treadmill['run_or_stop'] == 0]
+        spike_times_trail = spike_times[(spike_times > start) & (spike_times < end)]
+        raster_plot_singleneuron(spike_times,region_name,unit_id,trial_type)
+
+main(neurons)

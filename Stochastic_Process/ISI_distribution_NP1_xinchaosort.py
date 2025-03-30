@@ -12,7 +12,7 @@ np.set_printoptions(threshold=np.inf)
 np.seterr(divide='ignore',invalid='ignore')
 
 # ------- NEED CHANGE -------
-mice_name = '20230602_Syt2_conditional_tremor_mice2_lateral'
+mice_name = '20230604_Syt2_conditional_tremor_mice2_medial'
 
 # ------- NO NEED CHANGE -------
 ### parameter
@@ -25,7 +25,7 @@ fr_filter = 1
 
 ### path
 sorting_path = rf'E:\xinchao\Data\useful_data\NP1\{mice_name}\Sorted\{sorting_method}'
-save_path = rf'C:\Users\zyh20\Desktop\Research\01_ET_data_analysis\Research\ISI_distribution\NP1\{sorting_method}\{mice_name}'  
+save_path = rf'C:\Users\zyh20\Desktop\Research\01_ET_data_analysis\Research\ISI_distribution\NP1\{sorting_method}\Without_QC\{mice_name}'  
 save_path_whole_time = save_path + '/whole_time'
 treadmill = pd.read_csv(rf'E:\xinchao\Data\useful_data\NP1\{mice_name}\Marker\treadmill_move_stop_velocity_segm_trial.csv',index_col=0)
 treadmill_origin = pd.read_csv(rf'E:\xinchao\Data\useful_data\NP1\{mice_name}\Marker\treadmill_move_stop_velocity.csv',index_col=0)

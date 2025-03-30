@@ -12,8 +12,8 @@ np.set_printoptions(threshold=np.inf)
 np.seterr(divide='ignore',invalid='ignore')
 
 # ------- NEED CHANGE -------
-mice_name = '20230523_Syt2_conditional_tremor_mice1'
-mapping_file = 'unit_ch_dep_region_QC_isi_violations_ratio_pass_rate_76.42857142857143%.csv'
+mice_name = '20230604_Syt2_conditional_tremor_mice2_medial'
+mapping_file = 'unit_ch_dep_region_QC_isi_violations_ratio_pass_rate_72.90836653386454%.csv'
 QC_method = 'QC_ISI_violation'  # Without_QC/QC_ISI_violation
 
 # ------- NO NEED CHANGE -------

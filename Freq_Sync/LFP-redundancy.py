@@ -1,3 +1,16 @@
+fig_path = rf'C:\Users\zyh20\Desktop\ET_data analysis\LFP_frequence\{mice_name}\{region_name}'
+savepath_1 = fig_path + r'\trials\raw_tra&fq_spec\run'
+savepath_2 = fig_path + r'\trials\mainfq_phas_dif\run'
+savepath_3 = fig_path + r'\trials\raw_trace&fq_spec\stop'
+savepath_4 = fig_path + r'\trials\mainfq_phas_dif\stop'
+savepath_ch = fig_path + r'\trials\fq_spec_ch_overlay'
+savepath_trial = fig_path + r'\trials\fq_spec_trial_overlay'
+savepath_ch_trail = fig_path + r'\trials\fq_spec_ch_trail_overlay'
+
+savepath_9 = fig_path + r'\all_time\raw_trace&freq_spectrum'
+savepath_10 = fig_path + r'\all_time\main_freq_phase_diff'
+savepath_11 = fig_path + r'\all_time\freq_spectrum_overlay_ch'
+
 '''
 def analyse_freq_and_amp(x: np.ndarray, y: np.ndarray):
     """

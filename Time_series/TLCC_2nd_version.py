@@ -1,7 +1,7 @@
 """
 # coding: utf-8
 @author: Yuhao Zhang
-last updated: 11/11/2024
+last updated: 03/31/2025
 data from: Xinchao Chen
 """
 import neo
@@ -23,32 +23,28 @@ import glob
 import pandas as pd
 from scipy.signal import correlate, correlation_lags
 import matplotlib.pyplot as plt
-
 np.set_printoptions(threshold=np.inf)
 np.seterr(divide='ignore',invalid='ignore')
 
-### path
-mice_name = '20230113_littermate'
-main_path = r'E:\xinchao\sorted neuropixels data\useful_data\20230113_littermate\data'
-save_path = r'C:\Users\zyh20\Desktop\ET_data analysis\delay\20230113_littermate\run_trials\all_pairs\A_Interposed nucleus_B_Spinal vestibular nucleus'
+mice_name = '20230623_Syt2_conditional_tremor_mice4'
 
-### marker
-treadmill = pd.read_csv(main_path+'/marker/treadmill_move_stop_velocity.csv',index_col=0)
-print(treadmill)
 
+sorting_method = 'Xinchao_sort'  
+sorting_path = rf'E:\xinchao\Data\useful_data\NP1\{mice_name}\Sorted\{sorting_method}'
+save_path = rf'C:\Users\zyh20\Desktop\Research\01_ET_data_analysis\Research\delay\{mice_name}\run_trials\new'
+treadmill_new = pd.read_csv(rf'E:\xinchao\Data\useful_data\NP1\{mice_name}\Marker\treadmill_move_stop_velocity_segm_trial.csv',index_col=0)
+treadmill = pd.read_csv(rf'E:\xinchao\Data\useful_data\NP1\{mice_name}\Marker\treadmill_move_stop_velocity.csv',index_col=0)
 ### electrophysiology
-sample_rate=30000 #spikeGLX neuropixel sample rate
-identities = np.load(main_path+'/spike_train/spike_clusters.npy') #存储neuron的编号id,对应phy中的第一列id
-times = np.load(main_path+'/spike_train/spike_times.npy')  #
-channel = np.load(main_path+'/spike_train/channel_positions.npy')
-neurons = pd.read_csv(main_path+'/spike_train/region_neuron_id.csv', low_memory = False,index_col=0)#防止弹出警告
+sample_rate = 30000 #spikeGLX neuropixel sample rate
+identities = np.load(sorting_path + '/spike_clusters.npy') # time series: unit id of each spike
+times = np.load(sorting_path + '/spike_times.npy')  # time series: spike time of each spike
+neurons = pd.read_csv(sorting_path + f'/region_neuron_id.csv', low_memory = False,index_col=0)
 print(neurons)
-print("检查treadmill总时长和电生理总时长是否一致")
-print("电生理总时长")
-print((times[-1]/sample_rate)[0])
-print("跑步机总时长") 
-print(treadmill['time_interval_right_end'].iloc[-1])
-neuron_num = neurons.count().transpose().values
+print("Test if electrophysiology duration is equal to treadmill duration ...")
+elec_dura = (times[-1]/sample_rate)[0]
+treadmill_dura = treadmill['time_interval_right_end'].iloc[-1]
+print(f"Electrophysiology duration: {elec_dura}")
+print(f"Treadmill duration: {treadmill_dura}")
 
 # get single neuron spike train
 def singleneuron_spiketrain(id):
@@ -71,7 +67,7 @@ def TLCC(spiketrain1,spiketrain2):
     corr = correlate(array1, array2, mode='full')
     # 计算相关性的时间滞后范围
     lags = correlation_lags(len(array1), len(array2), mode='full')
-    lag_indices = (lags >=  int(-100)) & (lags <= int(100))  # 选择滞后在-50ms to 50ms
+    lag_indices = (lags >=  int(-200)) & (lags <= int(200))  # 选择滞后在-50ms to 50ms
     corr = corr[lag_indices]
     lags = lags[lag_indices]
     delay = lags[np.argmax(corr)]
@@ -117,7 +113,7 @@ def Prob_distri(delay,region_A,region_B,mice_name):
     plt.title(f'{region_A} -> {region_B}')
     plt.xlabel('Delay(ms)')
     plt.ylabel('Probability')
-    plt.xticks(np.arange(-50, 51, 10))
+    plt.xticks(np.arange(-100, 101, 10))
     plt.text(0.99, 0.9, f'{mice_name}', horizontalalignment='right', verticalalignment='top',transform=plt.gca().transAxes,fontsize=9)
     plt.savefig(save_path+f"/DelayDistribution_A_{region_A}_B_{region_B}.png",dpi=600,bbox_inches = 'tight')
 
@@ -249,6 +245,10 @@ def main(neurons,marker,region_A,region_B,mice_name,mice_type):
             region_A_id = np.array(neurons.iloc[:, i].dropna()).astype(int)
         elif region_name == region_B:
             region_B_id = np.array(neurons.iloc[:, i].dropna()).astype(int)
+    # 筛去ISI异常的neuron
+    #region_A_id = region_A_id[~np.isin(region_A_id, [354,355,356,358,359,363,364,365,366,369,370,381,391,392,393,394,395,403,406])]
+    #region_B_id = region_B_id[~np.isin(region_B_id, [718, 720, 723, 727, 753, 783, 791, 813, 815, 817, 818, 819])]
+    
     ## 对关注脑区之间的neurons先对A脑区每个neuron计算和B脑区中相关度最高的pair
     #combinations = neuron_pair_corre(region_A_id,region_B_id,region_A,region_B)   
     ## 对关注脑区之间的neurons两两组合
@@ -270,12 +270,12 @@ def main(neurons,marker,region_A,region_B,mice_name,mice_type):
     ## 计算完所有delay后，统计
     Prob_distri(delay,region_A,region_B,mice_name)
 
-region_A = 'Interposed nucleus'
-region_B = 'Spinal vestibular nucleus'
-#mice_type = 'cond_ET'
+region_A = 'Medial vestibular nucleus'
+region_B = 'Lobule III'
+mice_type = 'cond_ET'
 #mice_type = 'PV_Syt2'
-mice_type = 'littermate'
+#mice_type = 'littermate'
 main(neurons,treadmill,region_A,region_B,mice_name,mice_type)
 
 
-#A_Interposed nucleus_B_Spinal vestibular nucleus
+#A_Medial vestibular nucleus_B_Lobule III II  20230623_Syt2_conditional_tremor_mice4

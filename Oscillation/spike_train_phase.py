@@ -1,10 +1,9 @@
 """
 # coding: utf-8
 @author: Yuhao Zhang
-last updated: 03/03/2025
+last updated: 04/05/2025
 data from: Xinchao Chen
 """
-#提取信号的相位
 from scipy.fft import fft, fftfreq
 from scipy import signal
 import numpy as np
@@ -17,6 +16,9 @@ from math import log
 from scipy.stats import norm
 import warnings
 import scipy.io as sio
+import neo
+import elephant
+import quantities as pq
 np.set_printoptions(threshold=np.inf)
 
 # ------- NEED CHANGE -------
@@ -249,5 +251,9 @@ def main_function(neurons,marker):
         data,time_len = population_spikecounts(neuron_id,marker_start,marker_end,30,bin)
         t=np.arange(0,data.shape[1])
         signals = data
- 
+        phases, amps, times = elephant.phase_analysis.spike_triggered_phase(
+            elephant.signal_processing.hilbert(analogsignal),
+            spiketrain,
+            interpolate=True)
+        
 #main_function(neurons,treadmill)

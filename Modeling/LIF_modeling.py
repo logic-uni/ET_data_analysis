@@ -9,8 +9,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy import stats
 
-# @title Plotting Functions
-
 def histogram(counts, bins, vlines=(), ax=None, ax_args=None, **kwargs):
   """Plot a step histogram given counts over bins."""
   if ax is None:

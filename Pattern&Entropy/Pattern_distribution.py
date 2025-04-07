@@ -1,10 +1,9 @@
 """
 # coding: utf-8
 @author: Yuhao Zhang
-last updated: 08/14/2024
+last updated: 04/07/2025
 data from: Xinchao Chen
 """
-import torch
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -16,7 +15,6 @@ import quantities as pq  # noqa
 from elephant.spike_train_generation import StationaryPoissonProcess
 np.set_printoptions(threshold=np.inf)
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 fig_save_path = r'C:\Users\zyh20\Desktop\ET_data analysis\firing pattern'
 mice = '20230602-condictional tremor2-wai'
 ### marker

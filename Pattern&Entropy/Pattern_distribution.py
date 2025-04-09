@@ -4,47 +4,69 @@
 last updated: 04/07/2025
 data from: Xinchao Chen
 """
+import neo
+import quantities as pq
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import csv
 from math import log
 import warnings
 import random
-import quantities as pq  # noqa
-from elephant.spike_train_generation import StationaryPoissonProcess
+from elephant.conversion import BinnedSpikeTrain
+from elephant.spike_train_generation import StationaryPoissonProcess  # use this to test wherther the code is correct
 np.set_printoptions(threshold=np.inf)
 
-fig_save_path = r'C:\Users\zyh20\Desktop\ET_data analysis\firing pattern'
-mice = '20230602-condictional tremor2-wai'
-### marker
-treadmill_marker_path = r'E:\chaoge\sorted neuropixels data\20230602-condictional tremor2-wai\20230523_Syt2_449_3_Day60_g0'
-treadmill = pd.read_csv(treadmill_marker_path+'/treadmill_move_stop_velocity.csv',index_col=0)
-print(treadmill)
+# Lobule
+#20230113_littermate    Lobules IV-V
+#20230523_Syt2_conditional_tremor_mice1    Lobule III  Lobule II
+#20230604_Syt2_conditional_tremor_mice2_medial   Lobule III
+#20230602_Syt2_conditional_tremor_mice2_lateral  Lobule III
+#20230623_Syt2_conditional_tremor_mice4  Lobule III  Lobule II
 
-### electrophysiology
-sample_rate=30000 #spikeGLX neuropixel sample rate
-file_directory=r'E:\chaoge\sorted neuropixels data\20230602-condictional tremor2-wai\20230523_Syt2_449_3_Day60_g0\20230523_Syt2_449_3_Day60_g0_imec0'
-identities = np.load(file_directory+'/spike_clusters.npy') #存储neuron的编号id,对应phy中的第一列id
-times = np.load(file_directory+'/spike_times.npy')  #
-channel = np.load(file_directory+'/channel_positions.npy')
-neurons = pd.read_csv(file_directory+'/region_neuron_id.csv', low_memory = False,index_col=0)#防止弹出警告
+region_name = 'Lobules IV-V'
+## this parameter is for the elephant package
+fr_bin = 1  # unit: ms
+avoid_spikemore1 = True # 避免1ms的bin里有多个spike,对于1ms内多个spike的，强行置1
+
+## ------ Easysort ------
+# --- NEED CHANGE ---
+mice_name = '20230113_littermate'
+mapping_file = 'unit_ch_dep_region_QC_isi_violations_ratio_pass_rate_55.30864197530864%.csv'
+QC_method = 'QC_ISI_violation'  # Without_QC/QC_ISI_violation/etc
+# --- NO NEED CHANGE ---
+sorting_path = rf'E:\xinchao\Data\useful_data\NP1\{mice_name}\Sorted\Easysort\results_KS2\sorter_output'
+save_path = rf'C:\Users\zyh20\Desktop\Research\01_ET_data_analysis\Research\Firing_Pattern\NP1\Easysort\{QC_method}\{mice_name}'  
+neurons = pd.read_csv(rf'E:\xinchao\Data\useful_data\NP1\{mice_name}\Sorted\Easysort\mapping\{mapping_file}')  # different sorting have different nueron id
+
+# ------ Xinchao_sort ------
+# --- NEED CHANGE ---
+#mice_name = '20230602_Syt2_conditional_tremor_mice2_lateral'
+# --- NO NEED CHANGE ---
+#sorting_path = rf'E:\xinchao\Data\useful_data\NP1\{mice_name}\Sorted\Xinchao_sort'
+#save_path = rf'C:\Users\zyh20\Desktop\Research\01_ET_data_analysis\Research\spectrum_analysis\NP1\Xinchao_sort\{mice_name}'  
+#neurons = pd.read_csv(sorting_path + '/neuron_id_region_firingrate.csv')  # different sorting have different nueron id
+
+# --------- Load data ----------
+treadmill = pd.read_csv(rf'E:\xinchao\Data\useful_data\NP1\{mice_name}\Marker\treadmill_move_stop_velocity_segm_trial.csv',index_col=0)
+treadmill_origin = pd.read_csv(rf'E:\xinchao\Data\useful_data\NP1\{mice_name}\Marker\treadmill_move_stop_velocity.csv',index_col=0)
+# electrophysiology
+sample_rate = 30000 #spikeGLX neuropixel sample rate
+identities = np.load(sorting_path + '/spike_clusters.npy') # time series: unit id of each spike
+times = np.load(sorting_path + '/spike_times.npy')  # time series: spike time of each spike
 print(neurons)
-print("检查treadmill总时长和电生理总时长是否一致")
-print("电生理总时长")
-print((times[-1]/sample_rate)[0])
-print("跑步机总时长") 
-print(treadmill['time_interval_right_end'].iloc[-1])
-neuron_num = neurons.count().transpose().values
+print("Test if electrophysiology duration is equal to treadmill duration ...")
+elec_dura = (times[-1]/sample_rate)[0]
+treadmill_dura = treadmill_origin['time_interval_right_end'].iloc[-1]
+print(f"Electrophysiology duration: {elec_dura}")
+print(f"Treadmill duration: {treadmill_dura}")
 
-#### spike train & firing rates
-
+# --------- spike train ----------
 # get single neuron spike train
 def singleneuron_spiketrain(id):
     x = np.where(identities == id)
     y=x[0]
     spike_times=np.zeros(len(y))
-    print()
     for i in range(0,len(y)):
         z=y[i]
         spike_times[i]=times[z]/sample_rate
@@ -180,20 +202,22 @@ def firingrate_time(id,marker,duration,bin_width):
         )
     return histograms
 
-def population_spikecounts(neuron_id,marker_start,marker_end,Artificial_time_division,bin):  
+def population_spikecounts(neuron_id,marker_start,marker_end,trial_dura,bin): 
+    #trial_dura is trivial duration, finally it will be merged
+    #bin is the bin size of spike times, which is very important, now is 0.005s
     #这里由于allen的spike counts函数是针对视觉的，因此对trial做了划分，必要trialmarker作为参数，因此这里分假trial，再合并
     #Artificial_time_division是把整个session人为划分为一个个时间段trial
     #bin是对firing rate的滑窗大小，单位s
     one_neruon = np.array([])
-    marker=np.array(range(int(marker_start),int(marker_end)-int(marker_end)%Artificial_time_division,Artificial_time_division))
+    marker=np.array(range(int(marker_start),int(marker_end)-int(marker_end)%trial_dura,trial_dura))
     #get a 2D matrix with neurons, trials(trials contain times), trials and times are in the same dimension
     for j in range(len(neuron_id)): #第j个neuron
         #每个neuron的trials水平append
         for i in range(len(marker)):
             if i == 0:
-                one_neruon = firingrate_time(neuron_id[j],marker,Artificial_time_division,bin)[0]
+                one_neruon = firingrate_time(neuron_id[j],marker,trial_dura,bin)[0]
             else:
-                trail = firingrate_time(neuron_id[j],marker,Artificial_time_division,bin)[i]
+                trail = firingrate_time(neuron_id[j],marker,trial_dura,bin)[i]
                 one_neruon = np.append(one_neruon, trail)
         if j == 0:
             popu_spike = one_neruon
@@ -203,129 +227,78 @@ def population_spikecounts(neuron_id,marker_start,marker_end,Artificial_time_div
     print(popu_spike)
     print(popu_spike.shape)
     '''
-    time_len=(int(marker_end)-int(marker_end)%Artificial_time_division)/bin
+    time_len=(int(marker_end)-int(marker_end)%trial_dura)/bin
     return popu_spike,time_len
 
-def pattern_entropy_single(neuron_sptrain):
-    # about bin 1 bit = 1 msec 
-    # Statistics pattern all neurons
-    result_dic={}
-    for i in range(0,len(neuron_sptrain)-len(neuron_sptrain)%8,8):  # delete end bits that can't be divide by 8
-        a = np.array(neuron_sptrain[i:i+8])                # slice into 8 bit,  1 byte(1字节)(1B) = 8 bit(8比特)(8位二进制)；1KB = 1024B; 1MB = 1024KB; 1GB = 1024MB
-        str1 = ''.join(str(z) for z in a)         # array to str
-        if str1 not in result_dic:                # use dic to statistic, key = str, value = number of times
-            result_dic[str1]=1
+def popu_sptrain_trial(neuron_ids,marker_start,marker_end):
+    for j in range(len(neuron_ids)): #第j个neuron
+        spike_times = singleneuron_spiketrain(neuron_ids[j])
+        spike_times_trail = spike_times[(spike_times > marker_start) & (spike_times < marker_end)]
+        spiketrain = neo.SpikeTrain(spike_times_trail,units='sec',t_start=marker_start, t_stop=marker_end)
+        fr = BinnedSpikeTrain(spiketrain, bin_size=fr_bin*pq.ms,tolerance=None)
+        if avoid_spikemore1 == False:
+            one_neruon = fr.to_array().astype(int)[0]
         else:
-            result_dic[str1]+=1
-
-    for key in result_dic.keys():
-        if key.count('1') != 1:
-            del result_dic[key]
-
-    #compute probability
-    total=sum(result_dic.values())
-    p={k: v / total for k, v in result_dic.items()}
-    #plot
-    x=list(p.keys())
-    y=list(p.values())
-
-    plt.bar(x, y)
-    plt.title(f'sudo_Encoding pattern distribution', fontsize=16)
-    plt.xticks(x, rotation=90, fontsize=10)
-    plt.yticks(fontsize=16)
-    plt.ylabel("Probability of pattern", fontsize=16)
-    plt.savefig(fig_save_path+f"/sudo_Encoding pattern distribution.png",dpi=600,bbox_inches = 'tight')
-    plt.clf()
-
-def pattern_entropy_contain0(data,neuronid,region_name):
-    # about bin 1 bit = 1 msec 
-    # Statistics pattern all neurons
-    plt.figure(figsize=(20, 10))  # 宽度为15，高度为5
-    for j in range(0,len(data)):
-        id = neuronid[j]
-        neuron_sptrain=data[j]  # get a neuron
-        result_dic={}
-        for i in range(0,len(neuron_sptrain)-len(neuron_sptrain)%8,8):  # delete end bits that can't be divide by 8
-            a = np.array(neuron_sptrain[i:i+8])                # slice into 8 bit,  1 byte(1字节)(1B) = 8 bit(8比特)(8位二进制)；1KB = 1024B; 1MB = 1024KB; 1GB = 1024MB
-            str1 = ''.join(str(z) for z in a)         # array to str
-            if str1 not in result_dic:                # use dic to statistic, key = str, value = number of times
-                result_dic[str1]=1
-            else:
-                result_dic[str1]+=1
-
-        total=sum(result_dic.values())
-        p={k: v / total for k, v in result_dic.items()}  #compute probability
-
-        #plot
-        x=list(p.keys())
-        y=list(p.values())
-
-        plt.bar(x, y)
-        #plt.title(f'{mice}_{region_name}_{id}_Encoding pattern distribution', fontsize=16)
-        plt.xticks(x, rotation=90, fontsize=10)
-        plt.yticks(fontsize=16)
-        plt.ylabel("Probability of pattern", fontsize=16)
-        plt.savefig(fig_save_path+f"/{mice}_{region_name}_{id}_Encoding pattern distribution.png",dpi=600,bbox_inches = 'tight')
-        plt.clf()
-
-def pattern_entropy(data,neuronid,region_name):
-    # about bin 1 bit = 1 msec 
-    # Statistics pattern all neurons
-    plt.figure(figsize=(20, 10))  # 宽度为15，高度为5
-    for j in range(0,len(data)):
-        id = neuronid[j]
-        neuron_sptrain=data[j]  # get a neuron
-        result_dic={}
-        for i in range(0,len(neuron_sptrain)-len(neuron_sptrain)%8,8):  # delete end bits that can't be divide by 8
-            a = np.array(neuron_sptrain[i:i+8])                # slice into 8 bit,  1 byte(1字节)(1B) = 8 bit(8比特)(8位二进制)；1KB = 1024B; 1MB = 1024KB; 1GB = 1024MB
-            str1 = ''.join(str(z) for z in a)         # array to str
-            if str1 not in result_dic:                # use dic to statistic, key = str, value = number of times
-                result_dic[str1]=1
-            else:
-                result_dic[str1]+=1
-
-        #filtered_dict = {key: value for key, value in result_dic.items() if key.count('1') == 1 and key.count('0') == 7}
-        total=sum(result_dic.values())
-        filtered_dict = result_dic
-        del filtered_dict['00000000']
-        p={k: v / total for k, v in filtered_dict.items()}  #compute probability
-        # 提取并排序仅包含一个1的键值对
-        filtered_sorted_items = sorted(
-            {key: value for key, value in p.items() if key.count('1') == 1 and key.count('0') == len(key) - 1}.items()
-        )
-
-        # 提取其他不满足条件的键值对
-        remaining_items = {key: value for key, value in p.items() if key.count('1') != 1 or key.count('0') != len(key) - 1}
-
-        # 合并两个字典，将排序后的键值对放在前面
-        sorted_dict = dict(filtered_sorted_items)
-        sorted_dict.update(remaining_items)
+            fr_binar = fr.binarize()  # 对于可能在1ms内出现两个spike的情况，强制置为该bin下即1ms只能有一个spike
+            one_neruon = fr_binar.to_array().astype(int)[0]
         
-        #plot
-        x=list(sorted_dict.keys())
-        y=list(sorted_dict.values())
+        if j == 0:
+            neurons = one_neruon
+        else:
+            neurons = np.vstack((neurons, one_neruon))
+    return neurons
 
-        plt.bar(x, y)
-        #plt.title(f'{mice}_{region_name}_{id}_Encoding pattern distribution', fontsize=16)
-        plt.xticks(x, rotation=90, fontsize=10)
-        plt.yticks(fontsize=16)
-        plt.ylabel("Probability of pattern", fontsize=16)
-        plt.savefig(fig_save_path+f"/{mice}_{region_name}_{id}_Encoding pattern distribution.png",dpi=600,bbox_inches = 'tight')
-        plt.clf()
-
-    '''
-    # information entropy
-    h=0
-    for i in p:
-        h = h - p[i]*log(p[i],2)
-    print('Shannon Entropy=%f'%h)
     
-    #save to csv
-    my_list = [[key, value] for key, value in p_del0.items()]
-    with open('C:/Users/zyh20/Desktop/csv/0to5ET.csv', mode='w', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerows(my_list)
-    '''
+# --------- pattern ----------
+def pattern(data,neuronid,state,index):
+    for j in range(len(data)):
+        id = neuronid[j]
+        neuron_sptrain = data[j]
+        result_dic = {}
+        
+        # 步骤1：原始数据统计（包含全零）
+        for i in range(0, len(neuron_sptrain) - len(neuron_sptrain) % 8, 8):
+            segment = neuron_sptrain[i:i+8]
+            pattern = ''.join(str(bit) for bit in segment)
+            result_dic[pattern] = result_dic.get(pattern, 0) + 1
+
+        # 步骤2：计算概率（包含全零样本）
+        total_with_zero = max(sum(result_dic.values()), 1)  # 包含全零的总样本数
+        prob_dict_with_zero = {k: v/total_with_zero for k, v in result_dic.items()}
+
+        # 步骤3：过滤全零模式（仅影响绘图数据）
+        filtered_prob = {k: v for k, v in prob_dict_with_zero.items() if k != '00000000'}
+
+        # 步骤4：定义复合排序键（与之前相同）
+        def sort_key(item):
+            pattern = item[0]
+            ones_pos = tuple(i for i, bit in enumerate(pattern) if bit == '1')
+            return (len(ones_pos), ones_pos)
+        
+        # 执行排序（仅对非零模式）
+        sorted_patterns = sorted(filtered_prob.items(), key=sort_key)
+        
+        # 准备绘图数据
+        x = [item[0] for item in sorted_patterns]
+        y = [item[1] for item in sorted_patterns]
+        
+        # 可视化设置
+        plt.bar(x, y, color='steelblue', edgecolor='white')
+        plt.xticks(x, rotation=90, fontsize=7, ha='center', fontfamily='monospace')
+        plt.yticks(fontsize=12)
+        plt.ylabel("Probability (Excluding Zero Pattern)", fontsize=14)
+        plt.title(f'{region_name}_neuron{id} Pattern Distribution (包含全零计算概率)', fontsize=16)
+        
+        # 添加统计信息注释
+        zero_prob = prob_dict_with_zero.get('00000000', 0)
+        plt.text(0.95, 0.95, 
+                f'Zero Pattern Prob: {zero_prob:.4f}\nTotal Patterns: {total_with_zero}',
+                transform=plt.gca().transAxes,
+                ha='right', va='top',
+                fontsize=10,
+                bbox=dict(facecolor='white', alpha=0.8))
+        plt.savefig(f"{save_path}/{region_name}_neuron{id}_trial{index}_{state}.png",dpi=600,bbox_inches='tight',pad_inches=0.1)
+        plt.clf()
 
 def dict2csv(dic, filename):
     file = open(filename, 'w', encoding='utf-8', newline='')
@@ -336,32 +309,46 @@ def dict2csv(dic, filename):
         csv_writer.writerow(dic1)
     file.close()
 
-def main_function(population,marker):
-    '''
-    spiketrain = StationaryPoissonProcess(rate=50*pq.Hz,t_stop=10000*pq.ms,t_start=0*pq.ms,refractory_period=3*pq.ms).generate_spiketrain()
-    print(spiketrain)
-    pattern_entropy_single(spiketrain)
-    '''
-    for i in range(population.shape[1]):  #遍历所有的脑区
-        region_name = population.columns.values[i]
-        if region_name == 'Superior vestibular nucleus':
-            neuron_id = np.array(population.iloc[:, i].dropna()).astype(int)  #提取其中一个脑区的neuron id
-            marker_start = marker['time_interval_left_end'].iloc[12]
-            marker_end = marker['time_interval_right_end'].iloc[12]
-            print(marker_start)
-            print(marker_end)
-            data,time_len = population_spikecounts(neuron_id,marker_start,marker_start+40,5,0.005)
-            #print(data[-1].shape)
+def main():
+    plt.figure(figsize=(24, 10))  # 适当增加宽度保证标签显示
+    result = neurons.groupby('region')['cluster_id'].apply(list).reset_index(name='cluster_ids')
+    print(result)
+    for index, row in result.iterrows(): # select region neurons
+        region = row['region']
+        popu_ids = row['cluster_ids']
+        if region == region_name:
+            for index, row in treadmill_origin.iterrows():  # enumerate trials
+                status = row['run_or_stop']
+                if status == 1:
+                    run_time = row['time_interval_left_end']
+                    # before running 0.5s
+                    data = popu_sptrain_trial(popu_ids,run_time,run_time+0.5)
+                    pattern(data,popu_ids,'-0.5s',index)
+                    # after running 0.5s
+                    data = popu_sptrain_trial(popu_ids,run_time-0.5,run_time)
+                    pattern(data,popu_ids,'0.5s',index)
 
-            pattern_entropy(data,neuron_id,region_name)
-    
-
-main_function(neurons,treadmill)
+main()
 
 '''
+# information entropy
+h=0
+for i in p:
+    h = h - p[i]*log(p[i],2)
+print('Shannon Entropy=%f'%h)
+
+#save to csv
+my_list = [[key, value] for key, value in p_del0.items()]
+with open('C:/Users/zyh20/Desktop/csv/0to5ET.csv', mode='w', newline='') as file:
+    writer = csv.writer(file)
+    writer.writerows(my_list)
+'''
+'''
+spiketrain = StationaryPoissonProcess(rate=50*pq.Hz,t_stop=10000*pq.ms,t_start=0*pq.ms,refractory_period=3*pq.ms).generate_spiketrain()
+
 for i in range(0,len(neuron_sptrain)-len(neuron_sptrain)%8,8):  # delete end bits that can't be divide by 8
-    a = np.array(neuron_sptrain[i:i+8])                # slice into 8 bit,  1 byte(1字节)(1B) = 8 bit(8比特)(8位二进制)；1KB = 1024B; 1MB = 1024KB; 1GB = 1024MB
-    str1 = ''.join(str(z) for z in a)         # array to str
+    a = np.array(neuron_sptrain[i:i+8])   # slice into 8 bit,  1 byte(1字节)(1B) = 8 bit(8比特)(8位二进制)；1KB = 1024B; 1MB = 1024KB; 1GB = 1024MB
+    str1 = ''.join(str(z) for z in a)     # array to str
     # 如果 '1' 的数量大于 1，进行拆分
     if str1.count('1') > 1:
         result = []
@@ -372,12 +359,12 @@ for i in range(0,len(neuron_sptrain)-len(neuron_sptrain)%8,8):  # delete end bit
                 new_seq[i] = '1'
                 result.append(''.join(new_seq))
         for split in result:   
-            if split not in result_dic:                # use dic to statistic, key = str, value = number of times
+            if split not in result_dic:   # use dic to statistic, key = str, value = number of times
                 result_dic[split]=1
             else:
                 result_dic[split]+=1
     else:
-        if str1 not in result_dic:                # use dic to statistic, key = str, value = number of times
+        if str1 not in result_dic:     # use dic to statistic, key = str, value = number of times
             result_dic[str1]=1
         else:
             result_dic[str1]+=1
@@ -393,4 +380,39 @@ p_del0={k: v / total_del0 for k, v in result_dic.items()}
 x=list(p_del0.keys())
 y=list(p_del0.values())
 
+
+
+for i in range(0,len(neuron_sptrain)-len(neuron_sptrain)%8,8):  # delete end bits that can't be divide by 8
+    # slice into 8 bit,  1 byte(1字节)(1B) = 8 bit(8比特)(8位二进制)；1KB = 1024B; 1MB = 1024KB; 1GB = 1024MB
+    a = np.array(neuron_sptrain[i:i+8])                
+    str1 = ''.join(str(z) for z in a)         # array to str
+    if str1 not in result_dic:                # use dic to statistic, key = str, value = number of times
+        result_dic[str1]=1
+    else:
+        result_dic[str1]+=1
+
+#filtered_dict = {key: value for key, value in result_dic.items() if key.count('1') == 1 and key.count('0') == 7}
+total=sum(result_dic.values())
+filtered_dict = result_dic     # if you want to delete patttens that are all 0, please uncomment this line
+del filtered_dict['00000000']  # if you want to delete patttens that are all 0, please uncomment this line
+p={k: v / total for k, v in filtered_dict.items()}  #compute probability
+# 提取并排序仅包含一个1的键值对
+filtered_sorted_items = sorted(
+    {key: value for key, value in p.items() if key.count('1') == 1 and key.count('0') == len(key) - 1}.items()
+)
+# 提取其他不满足条件的键值对
+remaining_items = {key: value for key, value in p.items() if key.count('1') != 1 or key.count('0') != len(key) - 1}
+# 合并两个字典，将排序后的键值对放在前面
+sorted_dict = dict(filtered_sorted_items)
+sorted_dict.update(remaining_items)
+#plot
+x=list(sorted_dict.keys())
+y=list(sorted_dict.values())
+plt.bar(x, y)
+#plt.title(f'{mice}_{region_name}_{id}_Encoding pattern distribution', fontsize=16)
+plt.xticks(x, rotation=90, fontsize=10)
+plt.yticks(fontsize=16)
+plt.ylabel("Probability of pattern", fontsize=16)
+plt.savefig(fig_save_path+f"/{mice}_{region_name}_{id}_Encoding pattern distribution.png",dpi=600,bbox_inches = 'tight')
+plt.clf()
 '''

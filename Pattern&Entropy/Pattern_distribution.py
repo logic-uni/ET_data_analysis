@@ -248,7 +248,6 @@ def popu_sptrain_trial(neuron_ids,marker_start,marker_end):
             neurons = np.vstack((neurons, one_neruon))
     return neurons
 
-    
 # --------- pattern ----------
 def pattern(data,neuronid,state,index):
     for j in range(len(data)):

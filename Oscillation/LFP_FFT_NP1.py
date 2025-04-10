@@ -16,8 +16,8 @@ np.set_printoptions(threshold=np.inf)
 
 # ------- NEED CHANGE -------
 ####这个千万别忘了开或者关LFP截断
-mice_name = '20230113_littermate'
-LFP_file = '/Spinal vestibular nucleus_20230113_338_3_liteermate_female_stable_set_g0_t0.exported.imec0.lf.csv'
+mice_name = '20230604_Syt2_conditional_tremor_mice2_medial'
+LFP_file = '/Vestibulocerebellar nucleus_20230604_Syt2_449_3_Day61_2_g0_t0.exported.imec0.lf.csv'
 freq_low = 2
 freq_high = 500
 
@@ -27,11 +27,11 @@ treadmill = pd.read_csv(rf'E:\xinchao\Data\useful_data\NP1\{mice_name}\Marker\tr
 LFP = pd.read_csv(rf'E:\xinchao\Data\useful_data\NP1\{mice_name}\LFP' + LFP_file)
 region_name = LFP_file[1:]
 region_name = region_name.split('_')[0]
-save_path = rf'C:\Users\zyh20\Desktop\Research\01_ET_data_analysis\Research\LFP_FFT\NP1\Xinchao_sort\{mice_name}'  
+save_path = rf'E:\01_Work\Research\01_ET_data_analysis\Research\LFP_FFT\NP1\{mice_name}'  
 
 LFP = LFP.T
 LFP = LFP.to_numpy()
-LFP = LFP[:,800*sample_rate:2200*sample_rate] 
+LFP = LFP[:,0*sample_rate:1922*sample_rate] 
 # 对于littermate，请截取800-2200s
 # 对于20230604_Syt2_conditional_tremor_mice2_medial请截取 0-1922s
 # 其余的全部即可，无需截取
@@ -468,8 +468,8 @@ def each_trial_FFT_previous():
         else: state_name = 'run'
         #读取each trial的LFP
         trail_LFP = LFP[:, start:end]
-        analyze_all_bands(trail_LFP,state_name,i)
-        '''
+        #analyze_all_bands(trail_LFP,state_name,i)
+        
         # 直接绘制2-16Hz频谱图（无需滤波）
         print("Plotting 2-16Hz spectrum (no notch filtering needed)...")
         spectra = plot_2_16hz_spectrum(
@@ -478,7 +478,7 @@ def each_trial_FFT_previous():
             i,
             title_suffix="\n(Theta: 4-8Hz, Alpha: 8-12Hz)"
         )
-        
+        '''
         
         # 应用增强型陷波滤波器
         filtered_data = enhanced_notch_filter(trail_LFP)
@@ -491,8 +491,8 @@ def each_trial_FFT_previous():
             i,
             title_suffix="\n(After Enhanced Notch Filtering)"
         )
-        '''
-        '''
+        
+        
         freqs,values = fft_channels(trail_LFP)
         plt.plot(freqs, values)
         plt.xlabel('Frequency [Hz]')

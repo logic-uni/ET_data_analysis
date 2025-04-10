@@ -13,7 +13,6 @@ from matplotlib.pyplot import *
 from ast import literal_eval
 from sklearn.decomposition import PCA
 from elephant.conversion import BinnedSpikeTrain
-import matplotlib.pyplot as plt
 np.set_printoptions(threshold=np.inf)
 np.seterr(divide='ignore',invalid='ignore')
 
@@ -70,7 +69,7 @@ def singleneuron_spiketrain(id):
     x = np.where(identities == id)
     y=x[0]
     #y = np.where(np.isin(identities, id))[0]
-    spike_times=np.empty(len(y))
+    spike_times=np.zeros(len(y))
     for i in range(0,len(y)):
         z=y[i]
         spike_times[i]=times[z]/sample_rate

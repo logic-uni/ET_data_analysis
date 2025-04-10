@@ -1,7 +1,7 @@
 """
 # coding: utf-8
 @author: Yuhao Zhang
-last updated: 03/29/2025
+last updated: 04/06/2025
 data from: Xinchao Chen
 """
 
@@ -12,32 +12,27 @@ import warnings
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 np.set_printoptions(threshold=np.inf)
 
-# Lobule
-#20230113_littermate    Lobules IV-V
-#20230523_Syt2_conditional_tremor_mice1    Lobule III  Lobule II
-#20230604_Syt2_conditional_tremor_mice2_medial   Lobule III
-#20230602_Syt2_conditional_tremor_mice2_lateral  Lobule III
-#20230623_Syt2_conditional_tremor_mice4  Lobule III  Lobule II
-#  DCN
-#20230604_Syt2_conditional_tremor_mice2_medial  xinchaosort  Vestibulocerebellar nucleus
-#20230113_littermate   Interposed nucleus
-
+# --- NEED CHANGE ---
 region_name = 'Lobule III'
 
-## ------ Easysort ------
-# --- NEED CHANGE ---
+#20230113_littermate  Simple lobule  Lobules IV-V  Interposed nucleus  Superior vestibular nucleus   Spinal vestibular nucleus
+#20230523_Syt2_conditional_tremor_mice1    Lobule III  Lobule II
+#20230604_Syt2_conditional_tremor_mice2_medial   Lobule III  Vestibulocerebellar nucleus  Medial vestibular nucleus  Spinal vestibular nucleus
+#20230602_Syt2_conditional_tremor_mice2_lateral  Lobule III  Lobules IV-V  Superior vestibular nucleus  Medial vestibular nucleus
+#20230623_Syt2_conditional_tremor_mice4  Lobule III  Lobule II  Medial vestibular nucleus
+
+## Easysort  NEED CHANGE
 mice_name = '20230602_Syt2_conditional_tremor_mice2_lateral'
 mapping_file = 'unit_ch_dep_region_QC_isi_violations_ratio_pass_rate_60.17316017316017%.csv'
 QC_method = 'QC_ISI_violation'  # Without_QC/QC_ISI_violation/etc
-# --- NO NEED CHANGE ---
+# Easysort   NO NEED CHANGE
 sorting_path = rf'E:\xinchao\Data\useful_data\NP1\{mice_name}\Sorted\Easysort\results_KS2\sorter_output'
-save_path = rf'C:\Users\zyh20\Desktop\Research\01_ET_data_analysis\Research\raster_plot\Easysort\{QC_method}\{mice_name}'  
+save_path = rf'C:\Users\zyh20\Desktop\Research\01_ET_data_analysis\Research\Raster_plot\NP1\Easysort\{QC_method}\{mice_name}\selected_neuron'
 neurons = pd.read_csv(rf'E:\xinchao\Data\useful_data\NP1\{mice_name}\Sorted\Easysort\mapping\{mapping_file}')  # different sorting have different nueron id
 
-# ------ Xinchao_sort ------
-# --- NEED CHANGE ---
+# Xinchao_sort  NEED CHANGE
 #mice_name = '20230602_Syt2_conditional_tremor_mice2_lateral'
-# --- NO NEED CHANGE ---
+# Xinchao_sort  NO NEED CHANGE
 #sorting_path = rf'E:\xinchao\Data\useful_data\NP1\{mice_name}\Sorted\Xinchao_sort'
 #save_path = rf'C:\Users\zyh20\Desktop\Research\01_ET_data_analysis\Research\spectrum_analysis\NP1\Xinchao_sort\{mice_name}'  
 #neurons = pd.read_csv(sorting_path + '/neuron_id_region_firingrate.csv')  # different sorting have different nueron id
@@ -77,15 +72,22 @@ def raster_plot_singleneuron(spike_times,region,unit_id,trial_type):
     plt.savefig(save_path+f"/{region}_neuron_{unit_id}_{trial_type}.png",dpi=600,bbox_inches = 'tight')
     plt.clf()
 
-def RP_neurons_trial(spike_times, trial_num, trial_type):
+def RP_neurons_trial(spike_times, trial_num, trial_type,popu_ids):
     nu_num = len(spike_times)
-    for i in range(0, nu_num):
-        plt.plot(spike_times[i], np.repeat(i, len(spike_times[i])), '|', color='gray') 
+    colors = plt.cm.gist_ncar(np.linspace(0, 1, nu_num))
+    for i in range(nu_num):
+        plt.plot(spike_times[i], np.repeat(i, len(spike_times[i])), '|', color=colors[i], label=f'Neuron {popu_ids[i]}') 
     plt.title(f'Spike Train - Trial {trial_num}') 
     plt.xlabel("Time (s)")
     plt.ylabel("Neurons")
-    plt.yticks([])
-    plt.savefig(f"{save_path}/Ras_{region_name}_trial{trial_num}_{trial_type}.png", dpi=600, bbox_inches='tight')
+    plt.legend(
+        loc='upper right',
+        fontsize='small',
+        title='Neuron IDs',
+        ncol=2,  # 分多列显示
+        framealpha=0.7  # 增加透明度防止遮挡
+    )
+    plt.savefig(save_path+f"/{region_name}_trial{trial_num}_{trial_type}.png", dpi=600, bbox_inches='tight')
     plt.clf()
 
 # PETH: peri-event time histogram  事件周围时间直方图
@@ -186,13 +188,13 @@ def popu_sptime_trial(neuron_ids,start,end):
     return popu_sptime
 
 def main():
-    plt.figure(figsize=(50, 15))
+    plt.figure(figsize=(55, 15))
     result = neurons.groupby('region')['cluster_id'].apply(list).reset_index(name='cluster_ids')
     print(result)
     for index, row in result.iterrows():
         region = row['region']
         popu_ids = row['cluster_ids']
-        if region == region_name and len(popu_ids) > 6:
+        if region == region_name and len(popu_ids) > 3:
             # enumarate trials
             for index, row in treadmill.iterrows():
                 start = row['time_interval_left_end']
@@ -201,7 +203,9 @@ def main():
                     stage = 'static'
                 else:
                     stage = 'running'
+                # for selected neurons, replace popu_ids with specific neurons id
+                popu_ids = np.array([291, 292, 293, 294, 297, 299, 300, 302, 303, 304, 305])
                 spike_times_trail = popu_sptime_trial(popu_ids,start,start+15)
-                RP_neurons_trial(spike_times_trail,index,stage)
+                RP_neurons_trial(spike_times_trail,index,stage,popu_ids)
 
 main()

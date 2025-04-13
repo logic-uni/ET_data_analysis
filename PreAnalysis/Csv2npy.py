@@ -15,4 +15,3 @@ np_array = np.vstack(chunk_list)
 
 # 保存为npy文件
 np.save(LFP_path+npy_file, np_array)
-

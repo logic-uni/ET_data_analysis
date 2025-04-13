@@ -1,9 +1,10 @@
 """
 # coding: utf-8
 @author: Yuhao Zhang
-last updated: 03/01/2025
+last updated: 04/12/2025
 data from: Xinchao Chen
 """
+## Most Important, FFT of LFP signal must add Window, without that will get fault result
 from scipy.fft import fft, fftfreq  
 from scipy import signal
 import numpy as np
@@ -16,25 +17,29 @@ np.set_printoptions(threshold=np.inf)
 
 # ------- NEED CHANGE -------
 ####这个千万别忘了开或者关LFP截断
-mice_name = '20230604_Syt2_conditional_tremor_mice2_medial'
-LFP_file = '/Vestibulocerebellar nucleus_20230604_Syt2_449_3_Day61_2_g0_t0.exported.imec0.lf.csv'
-freq_low = 2
-freq_high = 500
+mice_name = '20230113_littermate'
+LFP_file = '/Interposed nucleus_20230113_338_3_liteermate_female_stable_set_g0_t0.exported.imec0.lf.csv'
+# this para is for previous codes
+#freq_low = 2
+#freq_high = 500
 
 # ------- NO NEED CHANGE -------
-sample_rate = 2500 # 2,499.985345140265   #spikeGLX neuropixel LFP sample rate
-treadmill = pd.read_csv(rf'E:\xinchao\Data\useful_data\NP1\{mice_name}\Marker\treadmill_move_stop_velocity.csv',index_col=0)
-LFP = pd.read_csv(rf'E:\xinchao\Data\useful_data\NP1\{mice_name}\LFP' + LFP_file)
+sample_rate = 2500  #spikeGLX neuropixel LFP sample rate
+treadmill = pd.read_csv(f"/data1/zhangyuhao/xinchao_data/NP1/{mice_name}/Marker/treadmill_move_stop_velocity.csv",index_col=0)
+LFP = pd.read_csv(f"/data1/zhangyuhao/xinchao_data/NP1/{mice_name}/LFP" + LFP_file)
 region_name = LFP_file[1:]
 region_name = region_name.split('_')[0]
-save_path = rf'E:\01_Work\Research\01_ET_data_analysis\Research\LFP_FFT\NP1\{mice_name}'  
+save_path = f"/home/zhangyuhao/Desktop/Result/ET/LFP_FFT/NP1/{mice_name}/"  
 
 LFP = LFP.T
 LFP = LFP.to_numpy()
-LFP = LFP[:,0*sample_rate:1922*sample_rate] 
+
+## Truncate LFP data when needed
 # 对于littermate，请截取800-2200s
 # 对于20230604_Syt2_conditional_tremor_mice2_medial请截取 0-1922s
 # 其余的全部即可，无需截取
+#LFP = LFP[:,800*sample_rate:2200*sample_rate] 
+
 print("检查treadmill总时长和LFP总时长是否一致")
 print("LFP总时长")
 print(LFP.shape[1]/sample_rate)
@@ -330,105 +335,38 @@ def analyze_all_bands(data, state, trial, sample_rate=2500):
             title_suffix="\n(After Enhanced Notch Filtering)"
         )
 
-def plot_2_50hz_spectrum(data, state, trial, sample_rate=2500, title_suffix=""):
-    """
-    专门绘制2-50Hz频段的多通道重叠频谱图
-    参数:
-        data: 输入信号 (n_channels, n_samples)
-        sample_rate: 采样率
-        title_suffix: 标题后缀
-    """
-    # 设置频率范围
-    freq_low, freq_high = 2, 50
-    n_samples = data.shape[1]
-    freqs = fftfreq(n_samples, 1/sample_rate)
+def fq_spectrum(data, state, trial, sample_rate=2500, title_suffix=""):
+    """改进后的频谱绘图函数"""
+    # 参数设置
+    freq_low, freq_high = 0.8, 16
+    n_channels, n_samples = data.shape
     
-    # 创建频率掩码 (2-50Hz)
+    # 汉宁窗
+    window = np.hanning(n_samples)
+    window_correction = np.sum(window)  # 窗能量补偿系数
+    
+    # 计算正频率
+    freqs = np.fft.rfftfreq(n_samples, 1/sample_rate)
     freq_mask = (freqs >= freq_low) & (freqs <= freq_high)
     freqs = freqs[freq_mask]
-    n_channels = data.shape[0]
     
-    # 创建颜色映射 (使用plasma色图更易区分低频)
-    colors = cm.plasma(np.linspace(0, 1, n_channels))
-    
-    # 计算并绘制每个通道的频谱
+    # 逐通道处理
     all_spectra = []
     for i in range(n_channels):
-        fft_result = fft(data[i])
-        spectrum = np.abs(fft_result[freq_mask])
+        # 加窗FFT
+        fft_result = np.fft.rfft(data[i] * window)
+        # 幅值补偿
+        spectrum = np.abs(fft_result[freq_mask]) * 2 / window_correction
         all_spectra.append(spectrum)
         
-        # 绘制曲线（关键通道加粗显示）
-        linewidth = 1.5 if i in [0, 25, 49] else 0.8  # 突出显示首、中、末通道
-        plt.plot(freqs, spectrum, 
-                color=colors[i], 
-                alpha=0.7, 
-                linewidth=linewidth,
-                label=f'Ch{i+1}' if i % 10 == 0 else "")  # 每10个通道显示一个标签
-
-    # 设置图形属性
-    plt.xlabel('Frequency (Hz)', fontsize=12)
-    plt.ylabel('Amplitude', fontsize=12)
-    plt.xlim(freq_low, freq_high)
-    plt.ylim(0, np.max(all_spectra)*1.1)
-    plt.grid(True, linestyle='--', alpha=0.4)
-    
-    # 添加颜色条表示通道编号
-    sm = plt.cm.ScalarMappable(cmap=cm.plasma, norm=plt.Normalize(vmin=1, vmax=n_channels))
-    sm.set_array([])
-    cbar = plt.colorbar(sm, pad=0.02)
-    cbar.set_label('Channel Number', rotation=270, labelpad=15)
-    
-    # 设置标题和图例
-    title = f'Multi-channel Spectrum (2-50Hz){title_suffix}'
-    plt.title(title, fontsize=14, pad=20)
-    plt.legend(loc='upper right', fontsize=8, ncol=2)
-    
-    plt.tight_layout()
-    plt.savefig(save_path+f"/{region_name}_{state}_trial{trial}.png")
-    plt.clf()
-
-    return all_spectra
-
-def plot_2_16hz_spectrum(data,state,trial, sample_rate=2500, title_suffix=""):
-    """
-    绘制2-16Hz频段的多通道重叠频谱图
-    参数:
-        data: 输入信号 (n_channels, n_samples)
-        sample_rate: 采样率
-        title_suffix: 标题后缀
-    """
-    # 设置频率范围
-    freq_low, freq_high = 2, 16
-    n_samples = data.shape[1]
-    freqs = fftfreq(n_samples, 1/sample_rate)
-    
-    # 创建频率掩码 (2-16Hz)
-    freq_mask = (freqs >= freq_low) & (freqs <= freq_high)
-    freqs = freqs[freq_mask]
-    n_channels = data.shape[0]
-    
-    # 创建颜色映射 (使用viridis色图)
-    colors = cm.viridis(np.linspace(0, 1, n_channels))
-    
-    # 创建大尺寸图形
-    plt.figure(figsize=(16, 8))
-    
-    # 计算并绘制每个通道的频谱
-    all_spectra = []
-    for i in range(n_channels):
-        fft_result = fft(data[i])
-        spectrum = np.abs(fft_result[freq_mask])
-        all_spectra.append(spectrum)
-        
-        # 绘制曲线（关键通道加粗显示）
+        # 绘图设置（保持原可视化参数）
         linewidth = 1.5 if i in [0, n_channels//2, n_channels-1] else 0.8
         plt.plot(freqs, spectrum, 
-                color=colors[i], 
-                alpha=0.7, 
-                linewidth=linewidth,
-                label=f'Ch{i+1}' if i % 10 == 0 else "")  # 每10个通道显示一个标签
-    
+                 color=cm.viridis(i/n_channels),
+                 alpha=0.7,
+                 linewidth=linewidth,
+                 label=f'Ch{i+1}' if i % 10 == 0 else "")
+           
     # 标记重要频段 (Theta: 4-8Hz, Alpha: 8-12Hz)
     plt.axvspan(4, 8, color='green', alpha=0.1, label='Theta (4-8Hz)')
     plt.axvspan(8, 12, color='blue', alpha=0.1, label='Alpha (8-12Hz)')
@@ -447,19 +385,69 @@ def plot_2_16hz_spectrum(data,state,trial, sample_rate=2500, title_suffix=""):
     cbar.set_label('Channel Number', rotation=270, labelpad=15)
     
     # 设置标题和图例
-    title = f'Multi-channel Spectrum (2-16Hz){title_suffix}'
+    title = f'Multi-channel Spectrum (0.8-16Hz){title_suffix}'
     plt.title(title, fontsize=14, pad=20)
     plt.legend(loc='upper right', fontsize=8, ncol=3)
     
     plt.tight_layout()
-    plt.savefig(save_path+f"/{region_name}_{state}_trial{trial}.png")
+    plt.savefig(save_path+f"/spectrum/{region_name}_{state}_trial{trial}.png")
     plt.clf()
 
-    return all_spectra
+def fq_heatmap(data, state, trial, sample_rate=2500, title_suffix=""):
+    # 设置频率范围为0.8-16Hz
+    freq_low, freq_high = 0.8, 16
+    n_channels, n_samples = data.shape
 
+    # 计算正频率
+    freqs = np.fft.rfftfreq(n_samples, 1/sample_rate)
+    freq_mask = (freqs >= freq_low) & (freqs <= freq_high)
+    freqs = freqs[freq_mask]
+    
+    # 添加汉宁窗
+    window = np.hanning(n_samples)
+
+    # 逐通道处理
+    all_spectra = []
+    for i in range(n_channels):
+        fft_result = np.fft.rfft(data[i] * window)  # 加窗处理
+        spectrum = np.abs(fft_result[freq_mask])   # 或计算功率谱: np.abs(fft_result[freq_mask])​**​2
+        all_spectra.append(spectrum)
+    all_spectra = np.array(all_spectra)
+
+    # 绘图部分保持不变，调整标题
+    plt.title(f'Multi-channel Spectrum Heatmap (0.8-16Hz){title_suffix}', fontsize=14, pad=20)
+    # 生成坐标网格
+    X, Y = np.meshgrid(freqs, np.arange(n_channels))
+
+    pc = plt.pcolormesh(X, Y, all_spectra,
+                       shading='auto',
+                       cmap='plasma')
+    
+    # 保证通道0在底部
+    plt.gca().invert_yaxis()
+    
+    # 添加颜色条
+    cbar = plt.colorbar(pc, pad=0.02)
+    cbar.set_label('Amplitude', rotation=270, labelpad=20)
+    
+    # 设置坐标轴
+    plt.xlabel('Frequency (Hz)', fontsize=12)
+    plt.ylabel('Channel Number', fontsize=12)
+    plt.xlim(freq_low, freq_high)
+    
+    # 设置刻度
+    plt.yticks(np.arange(0, n_channels, 10), fontsize=8)
+    
+    # 设置标题
+    title = f'Multi-channel Spectrum Heatmap (0.8-16Hz){title_suffix}'
+    plt.title(title, fontsize=14, pad=20)
+    
+    plt.tight_layout()
+    plt.savefig(save_path+f"/heatmap/{region_name}_{state}_trial{trial}_heatmap.png")
+    plt.clf()
 
 def each_trial_FFT_previous():
-    plt.figure(figsize=(12, 6))
+    plt.figure(figsize=(14, 8))
     for i in range(0,len(treadmill['run_or_stop'])):
         start = int(treadmill['time_interval_left_end'].iloc[i]*sample_rate)   #乘以采样率，转换为采样点
         end = int(treadmill['time_interval_right_end'].iloc[i]*sample_rate)
@@ -468,31 +456,15 @@ def each_trial_FFT_previous():
         else: state_name = 'run'
         #读取each trial的LFP
         trail_LFP = LFP[:, start:end]
-        #analyze_all_bands(trail_LFP,state_name,i)
+        print(start)
+        print(end)
+        print(trail_LFP.shape)
+        #analyze_all_bands()
+        fq_spectrum(trail_LFP, state_name, i)
+        fq_heatmap(trail_LFP, state_name, i)
         
-        # 直接绘制2-16Hz频谱图（无需滤波）
-        print("Plotting 2-16Hz spectrum (no notch filtering needed)...")
-        spectra = plot_2_16hz_spectrum(
-            trail_LFP, 
-            state_name,
-            i,
-            title_suffix="\n(Theta: 4-8Hz, Alpha: 8-12Hz)"
-        )
+        #filtered_data = enhanced_notch_filter(trail_LFP)  # 应用增强型陷波滤波器
         '''
-        
-        # 应用增强型陷波滤波器
-        filtered_data = enhanced_notch_filter(trail_LFP)
-        
-        # 绘制2-50Hz频谱图
-        print("Plotting 2-50Hz spectrum with enhanced notch filtering...")
-        spectra = plot_2_50hz_spectrum(
-            filtered_data, 
-            state_name,
-            i,
-            title_suffix="\n(After Enhanced Notch Filtering)"
-        )
-        
-        
         freqs,values = fft_channels(trail_LFP)
         plt.plot(freqs, values)
         plt.xlabel('Frequency [Hz]')

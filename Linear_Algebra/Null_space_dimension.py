@@ -8,8 +8,6 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import warnings
-from sklearn.metrics import pairwise_distances
-from mayavi import mlab
 np.set_printoptions(threshold=np.inf)
 
 mice = 'littermate'

@@ -16,21 +16,30 @@ from matplotlib import cm
 from scipy.signal import iirnotch, filtfilt
 import cupy as cp
 from cupyx.scipy.fft import rfftfreq
+import cupyx.scipy.signal as signal
 np.set_printoptions(threshold=np.inf)
-import numba
-@numba.jit(nopython=True) 
 
+'''
+# ------- For s data -------
+fs = 30000  # 30 kHz for NP2
+region_name = 'VN'
+freq_low, freq_high = 16, 40
+LFP = np.load("/data1/zhangyuhao/xinchao_data/NP2/stolen/headtremor/02/LFP_npy/export.npy")
+save_path = "/home/zhangyuhao/Desktop/Result/ET/LFP_FFT/NP2/stolen/02/" 
+'''
+# ------- For g data -------
 # ------- NEED CHANGE -------
 mice_name = '20250310_VN_tremor'  # 20250310_VN_control 20250310_VN_harmaline  20250310_VN_tremor
 region_name = 'VN'
-freq_low, freq_high = 0.8, 16
+freq_low, freq_high = 4, 16
 
 # ------- NO NEED CHANGE -------
 fs = 30000  # 30 kHz for NP2
 marker = pd.read_csv(f"/data1/zhangyuhao/xinchao_data/NP2/{mice_name}/Marker/static_motion_segement.csv")
 print(marker)
 LFP = np.load(f"/data1/zhangyuhao/xinchao_data/NP2/{mice_name}/LFP_npy/{mice_name}.npy")
-save_path = f"/home/zhangyuhao/Desktop/Result/ET/LFP_FFT/NP2/{mice_name}/"  
+#save_path = f"/home/zhangyuhao/Desktop/Result/ET/LFP_FFT/NP2/{mice_name}/"  
+save_path = f"/home/zhangyuhao/Desktop/Result/ET/LFP_STFT/{mice_name}/whole/"
 
 print("Test if LFP duration same as marker duration...")
 print(f"LFP duration: {LFP.shape[1]/fs}")
@@ -393,11 +402,11 @@ def fq_spectrum(data, state, trial, title_suffix=""):
     plt.xlim(freq_low, freq_high)
     plt.ylim(0, np.max(all_spectra)*1.1)
     plt.grid(True, linestyle='--', alpha=0.4)
-    
-    # 添加颜色条表示通道编号
+
+    ax = plt.gca()  # 获取当前坐标轴
     sm = plt.cm.ScalarMappable(cmap=cm.viridis, norm=plt.Normalize(vmin=1, vmax=n_channels))
     sm.set_array([])
-    cbar = plt.colorbar(sm, pad=0.02)
+    cbar = plt.colorbar(sm, ax=ax, pad=0.02)  # 明确指定 ax
     cbar.set_label('Channel Number', rotation=270, labelpad=15)
     
     # 设置标题和图例
@@ -451,8 +460,180 @@ def fq_heatmap(data, state, trial, title_suffix=""):
     plt.savefig(save_path+f"/heatmap/{region_name}_{state}_trial{trial}_heatmap.png")
     plt.clf()
 
+def fq_spectrum_cupy(data, state, trial, title_suffix=""):
+    n_channels, n_samples = data.shape
+    
+    # 修改2：将数据转移到GPU（假设原始数据在CPU）
+    data_gpu = cp.asarray(data)  # 如果输入数据已经是GPU数组可省略
+    
+    # 修改3：使用cupy生成汉宁窗
+    window = cp.hanning(n_samples)  # 或者 cp.blackman等
+    window_correction = cp.sum(window)  # 修改4：GPU计算窗能量
+    
+    # 修改5：使用cupy计算频率
+    freqs = rfftfreq(n_samples, 1/fs)
+    freq_mask = (freqs >= freq_low) & (freqs <= freq_high)
+    freqs = freqs[freq_mask].get()  # 修改6：转回CPU用于绘图
+    
+    all_spectra = []
+    for i in range(n_channels):
+        # 修改7：在GPU上执行加窗和FFT
+        signal_gpu = data_gpu[i] * window
+        fft_result = cp.fft.rfft(signal_gpu)
+        
+        # 修改8：GPU处理频谱
+        spectrum_gpu = cp.abs(fft_result[freq_mask]) * 2 / window_correction
+        spectrum = spectrum_gpu.get()  # 转回CPU
+        all_spectra.append(spectrum)
+        
+        # 绘图部分保持原样（使用CPU数据）
+        linewidth = 1.5 if i in [0, n_channels//2, n_channels-1] else 0.8
+        plt.plot(freqs, spectrum, 
+                 color=cm.viridis(i/n_channels),
+                 alpha=0.7,
+                 linewidth=linewidth,
+                 label=f'Ch{i+1}' if i % 10 == 0 else "")
+               
+    # 设置图形属性
+    plt.xlabel('Frequency (Hz)', fontsize=12)
+    plt.ylabel('Amplitude', fontsize=12)
+    plt.xlim(freq_low, freq_high)
+    plt.ylim(0, np.max(all_spectra)*1.1)
+    plt.grid(True, linestyle='--', alpha=0.4)
+    
+    # 添加颜色条表示通道编号
+    ax = plt.gca()  # 获取当前坐标轴
+    sm = plt.cm.ScalarMappable(cmap=cm.viridis, norm=plt.Normalize(vmin=1, vmax=n_channels))
+    sm.set_array([])
+    cbar = plt.colorbar(sm, ax=ax, pad=0.02)  # 明确指定 ax
+    cbar.set_label('Channel Number', rotation=270, labelpad=15)
+    
+    # 设置标题和图例
+    title = f'Multi-channel Spectrum ({freq_low}-{freq_high}Hz){title_suffix}'
+    plt.title(title, fontsize=14, pad=20)
+    plt.legend(loc='upper right', fontsize=8, ncol=3)
+    
+    plt.tight_layout()
+    plt.savefig(save_path+f"/spectrum/{region_name}_{state}_trial{trial}.png")
+    plt.clf()
+        
+def fq_heatmap_cupy(data, state, trial, title_suffix=""):
+    n_channels, n_samples = data.shape
+    
+    # 修改9：数据转移到GPU
+    data_gpu = cp.asarray(data)
+    
+    # 修改10：使用cupy计算频率
+    freqs = rfftfreq(n_samples, 1/fs)
+    freq_mask = (freqs >= freq_low) & (freqs <= freq_high)
+    freqs = freqs[freq_mask].get()  # 转回CPU
+    
+    # 修改11：cupy生成窗
+    window = cp.hanning(n_samples)
+    
+    all_spectra = []
+    for i in range(n_channels):
+        # 修改12：GPU处理
+        signal_gpu = data_gpu[i] * window
+        fft_result = cp.fft.rfft(signal_gpu)
+        spectrum_gpu = cp.abs(fft_result[freq_mask])
+        all_spectra.append(spectrum_gpu.get())  # 修改13：转回CPU
+    
+    # 绘图部分保持不变（使用CPU数据）
+    all_spectra = np.array(all_spectra)
+    X, Y = np.meshgrid(freqs, np.arange(n_channels))
+
+    pc = plt.pcolormesh(X, Y, all_spectra,
+                       shading='auto',
+                       cmap='plasma')
+    
+    plt.gca().invert_yaxis()  # 保证通道0在底部
+    cbar = plt.colorbar(pc, pad=0.02)
+    cbar.set_label('Amplitude', rotation=270, labelpad=20)
+    plt.xlabel('Frequency (Hz)', fontsize=12)
+    plt.ylabel('Channel Number', fontsize=12)
+    plt.xlim(freq_low, freq_high)
+    plt.yticks(np.arange(0, n_channels, 10), fontsize=8)
+    title = f'Multi-channel Spectrum Heatmap ({freq_low}-{freq_high}Hz){title_suffix}'
+    plt.title(title, fontsize=14, pad=20)
+    
+    plt.tight_layout()
+    plt.savefig(save_path+f"/heatmap/{region_name}_{state}_trial{trial}_heatmap.png")
+    plt.clf()
+
+def stft_spectrum_cupy(data, state, title_suffix="", fs=30000):
+    n_channels, n_samples = data.shape
+    freq_low, freq_high = 0.8, 40
+    
+    # 关键参数调整 ---------------------------------------------------
+    window_sec = 2.0                  # 增大时间窗口到2秒
+    nperseg = int(fs * window_sec)    # 60000 samples (2秒窗口)
+    noverlap = int(nperseg * 0.9)     # 保持90%重叠 (54000 samples)
+    nfft = nperseg                    # 频率分辨率 0.5Hz (1/window_sec)
+    
+    # 数据长度校验
+    if n_samples < nperseg:
+        raise ValueError(f"数据长度不足！需要至少{nperseg}样本，当前{n_samples}")
+
+    # GPU计算部分 ----------------------------------------------------
+    data_gpu = cp.asarray(data)
+    
+    for ch_idx in range(n_channels):
+        # 执行STFT (GPU加速)
+        f, t, Zxx = signal.stft(
+            data_gpu[ch_idx],
+            fs=fs,
+            window=cp.hanning(nperseg),
+            nperseg=nperseg,
+            noverlap=noverlap,
+            nfft=nfft,
+            boundary='zeros'  # 处理边界效应
+        )
+        
+        # 频率筛选与标准化 --------------------------------------------
+        magnitude = cp.abs(Zxx)
+        freq_mask = (f >= freq_low) & (f <= freq_high)
+        f_filtered = f[freq_mask]
+        magnitude = magnitude[freq_mask, :]  # 保持二维结构
+        
+        # 行方向Z-score标准化
+        mean = cp.mean(magnitude, axis=1, keepdims=True)
+        std = cp.std(magnitude, axis=1, keepdims=True)
+        cp.maximum(std, 1e-6, out=std)
+        z_scores = (magnitude - mean) / std
+        
+        # 数据转换回CPU ----------------------------------------------
+        t_cpu = cp.asnumpy(t)
+        f_cpu = cp.asnumpy(f_filtered)
+        z_cpu = cp.asnumpy(z_scores)
+        
+        # 可视化设置 -------------------------------------------------
+        plt.figure(figsize=(15, 4))
+        plt.pcolormesh(t_cpu, f_cpu, z_cpu,
+                      shading='gouraud',
+                      cmap='viridis',
+                      vmin=-3, vmax=3,
+                      rasterized=True)  # 加速大图保存
+        plt.colorbar(label='Normalized Power')
+        plt.xlabel('Time (s)')
+        plt.ylabel('Frequency (Hz)')
+        plt.ylim(f_filtered.min(), freq_high)  # 精确显示筛选范围
+        plt.title(f'Ch{ch_idx+1} {state} (Δf={1/window_sec}Hz)')
+        plt.tight_layout()
+
+        # 保存并清理
+        plt.savefig(f"{save_path}/{region_name}_{state}_ch{ch_idx+1}.png")
+        plt.close()
+
 def main():
     plt.figure(figsize=(14, 8))
+
+    trail_LFP = LFP[:, 800*fs:980*fs]
+    #analyze_all_bands()
+    stft_spectrum_cupy(trail_LFP, '800-980')
+    #fq_spectrum_cupy(LFP, 'whole', 0)
+    #fq_heatmap_cupy(LFP, 'whole', 0)
+    '''
     for i in range(0,len(marker['run_or_stop'])):
         start = int(marker['time_interval_left_end'].iloc[i]*fs)   #乘以采样率，转换为采样点
         end = int(marker['time_interval_right_end'].iloc[i]*fs)
@@ -462,9 +643,9 @@ def main():
         #读取each trial的LFP
         trail_LFP = LFP[:, start:end]
         #analyze_all_bands()
-        fq_spectrum(trail_LFP, state_name, i)
-        fq_heatmap(trail_LFP, state_name, i)
-        
+        fq_spectrum_cupy(trail_LFP, state_name, i)
+        fq_heatmap_cupy(trail_LFP, state_name, i)
+    '''
 main()
 
 #filtered_data = enhanced_notch_filter(trail_LFP)  # 应用增强型陷波滤波器

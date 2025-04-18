@@ -36,7 +36,7 @@ print(treadmill['time_interval_right_end'].iloc[-1])
 
 #### spike train & firing rates
 # get single neuron spike train
-def singleneuron_spiketrain(id):
+def singleneuron_spiketimes(id):
     x = np.where(identities == id)
     y=x[0]
     spike_times=np.empty(len(y))
@@ -154,7 +154,7 @@ def binary_spiketrain(id,marker):  #each trial
     bins = np.arange(pre_time, post_time+bin_width, bin_width)   
 
     histograms=spike_counts(
-        singleneuron_spiketrain(id),
+        singleneuron_spiketimes(id),
         bin_edges=bins,
         movement_start_time=marker,
         )
@@ -169,7 +169,7 @@ def firingrate_time(id,marker,duration,bin_width):
     bins = np.arange(pre_time, post_time+bin_width,bin_width)  # bin_width默认 0.14
     # histograms
     histograms=spike_counts(
-        singleneuron_spiketrain(id),
+        singleneuron_spiketimes(id),
         bin_edges=bins,
         movement_start_time=marker,
         )

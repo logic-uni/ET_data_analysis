@@ -27,6 +27,10 @@ print(f"LFP duration: {lfp_data.shape[1]/fs}")
 print(f"AP duration: {times[-1] / fs}")
 save_path = f"/home/zhangyuhao/Desktop/Result/ET/Spike_Phase/NP2/{mice_name}/"  
 
+# truncated focused time interval
+trunc_left = 474
+trunc_right = 528
+lfp_trunc = lfp_data[:, trunc_left*fs:trunc_right*fs]
 # -------------------------------
 # Parameters
 # -------------------------------
@@ -139,12 +143,20 @@ def main():
     for index, row in neurons.iterrows():
         unit_id = row['cluster_id']
         spike_times = singleneuron_spiketimes(unit_id)
-        print(f"LFP duration: {lfp_data.shape[1]/fs} seconds")
-        print(f"Spike times range: {spike_times.min()} to {spike_times.max()} seconds")
         fr = len(spike_times)/(times[-1] / fs)
-        if fr > 2:
-            print(f"Neuron id:{unit_id}, computing spike phase...")
-            polarity_indices = process_all_channels(lfp_data, spike_times, fs, unit_id)
-            print("Done! Polarity Indices:", polarity_indices)
+        if fr > 2:  # filter fr
+            spike_times_trunc = spike_times[(spike_times >= trunc_left) & (spike_times < trunc_right)]
+            print(f"LFP duration: {lfp_trunc.shape[1]/fs} seconds")
+            if len(spike_times_trunc) != 0:  # filter not firing in this interval
+                print(f"Spike times range: {spike_times_trunc.min()} to {spike_times_trunc.max()} seconds")
+                print(f"Neuron id:{unit_id}, computing spike phase...")
+                polarity_indices = process_all_channels(lfp_trunc, spike_times_trunc, fs, unit_id)
+                print("Done! Polarity Indices:", polarity_indices)
 
-main()
+def speci_neuron_phase():
+    spike_times = singleneuron_spiketimes(5)
+    polarity_indices = process_all_channels(lfp_data, spike_times, fs, 5)
+    print("Done! Polarity Indices:", polarity_indices)
+
+#main()
+speci_neuron_phase()

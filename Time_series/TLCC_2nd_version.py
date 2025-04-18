@@ -47,7 +47,7 @@ print(f"Electrophysiology duration: {elec_dura}")
 print(f"Treadmill duration: {treadmill_dura}")
 
 # get single neuron spike train
-def singleneuron_spiketrain(id):
+def singleneuron_spiketimes(id):
     x = np.where(identities == id)
     y=x[0]
     spike_times=np.empty(len(y))
@@ -121,13 +121,13 @@ def neuron_pair_corre(neuron_A_id,neuron_B_id,region_A,region_B):
     #取出第一组中的所有neuron，分别计算每个neuron和第二组neurons的最高相关度neuron
     m=0
     for neuron_A in neuron_A_id:
-        spike_times_A = singleneuron_spiketrain(neuron_A)
+        spike_times_A = singleneuron_spiketimes(neuron_A)
         spiketrain_A = neo.SpikeTrain(spike_times_A,units='sec',t_start=0, t_stop=(times[-1]/sample_rate)[0])
         binned_spiketrain_A_neo = BinnedSpikeTrain(spiketrain_A, bin_size=0.5*pq.ms,tolerance=None)
         binned_spiketrain_A = binned_spiketrain_A_neo.to_array().astype(int)[0]
         j=0
         for neuron_B in neuron_B_id:
-            spike_times_B = singleneuron_spiketrain(neuron_B)
+            spike_times_B = singleneuron_spiketimes(neuron_B)
             spiketrain_B = neo.SpikeTrain(spike_times_B,units='sec',t_start=0, t_stop=(times[-1]/sample_rate)[0])
             binned_spiketrain_B_neo = BinnedSpikeTrain(spiketrain_B, bin_size=0.5*pq.ms,tolerance=None)
             binned_spiketrain_B = binned_spiketrain_B_neo.to_array().astype(int)[0]
@@ -150,8 +150,8 @@ def neuron_pair_corre(neuron_A_id,neuron_B_id,region_A,region_B):
     return combinations
 
 def delay_runtrials_cond_ET(neuron_a_id,neuron_b_id,marker):
-    spike_times1 = singleneuron_spiketrain(neuron_a_id)
-    spike_times2 = singleneuron_spiketrain(neuron_b_id)
+    spike_times1 = singleneuron_spiketimes(neuron_a_id)
+    spike_times2 = singleneuron_spiketimes(neuron_b_id)
     ## ET
     for trial in np.arange(1,len(marker['time_interval_left_end']),2):
         marker_start = marker['time_interval_left_end'].iloc[trial]
@@ -168,8 +168,8 @@ def delay_runtrials_cond_ET(neuron_a_id,neuron_b_id,marker):
     return delay_trial
 
 def delay_runtrials_littermate(neuron_a_id,neuron_b_id,marker):
-    spike_times1 = singleneuron_spiketrain(neuron_a_id)
-    spike_times2 = singleneuron_spiketrain(neuron_b_id)
+    spike_times1 = singleneuron_spiketimes(neuron_a_id)
+    spike_times2 = singleneuron_spiketimes(neuron_b_id)
     ## LITTERMATE 人为切分30s的trial
     for marker_start in np.arange(105,495,30):
         marker_end = marker_start + 30
@@ -194,8 +194,8 @@ def delay_runtrials_littermate(neuron_a_id,neuron_b_id,marker):
     return delay_trial
 
 def delay_runtrials_PV_Syt2(neuron_a_id,neuron_b_id,marker):
-    spike_times1 = singleneuron_spiketrain(neuron_a_id)
-    spike_times2 = singleneuron_spiketrain(neuron_b_id)
+    spike_times1 = singleneuron_spiketimes(neuron_a_id)
+    spike_times2 = singleneuron_spiketimes(neuron_b_id)
     ## PV_Syt2 人为切分30s的trial
     for marker_start in np.arange(0,360,30):
         marker_end = marker_start + 30
@@ -220,8 +220,8 @@ def delay_runtrials_PV_Syt2(neuron_a_id,neuron_b_id,marker):
     return delay_trial
 
 def delay_session(neuron_a_id,neuron_b_id,marker):
-    spike_times1 = singleneuron_spiketrain(neuron_a_id)
-    spike_times2 = singleneuron_spiketrain(neuron_b_id)
+    spike_times1 = singleneuron_spiketimes(neuron_a_id)
+    spike_times2 = singleneuron_spiketimes(neuron_b_id)
     
     ## ET
     marker_start = marker['time_interval_left_end'].iloc[0]

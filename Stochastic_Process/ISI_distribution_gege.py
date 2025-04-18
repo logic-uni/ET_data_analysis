@@ -36,7 +36,7 @@ print(elec_dura)
 
 # ------- Main Program -------
 # get single neuron spike train
-def singleneuron_spiketrain(id):
+def singleneuron_spiketimes(id):
     x = np.where(identities == id)
     y=x[0]
     spike_times=np.empty(len(y))
@@ -46,7 +46,7 @@ def singleneuron_spiketrain(id):
     return spike_times
 
 def ISI_single_neuron_session(unit_id):
-    spike_times = singleneuron_spiketrain(unit_id)
+    spike_times = singleneuron_spiketimes(unit_id)
     intervals = np.array([])
     # 如果整个session的spike个数，小于elec_dura电生理时长（s），即每秒钟的spike个数小于1，则不进行统计
     if len(spike_times) > (fr_filter*elec_dura): 

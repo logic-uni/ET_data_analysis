@@ -46,7 +46,7 @@ print(f"Treadmill duration: {treadmill_dura}")
 
 # ------- Main Program -------
 # get single neuron spike train
-def singleneuron_spiketrain(id):
+def singleneuron_spiketimes(id):
     x = np.where(identities == id)
     y=x[0]
     spike_times=np.empty(len(y))
@@ -72,7 +72,7 @@ def plot(spike_times,start,end,color):
     return intervals
 
 def ISI_single_neuron_trials(region,unit_id,trial_type):
-    spike_times = singleneuron_spiketrain(unit_id)
+    spike_times = singleneuron_spiketimes(unit_id)
     neuron_intervals = []  # 用于存储该neuron的所有时间间隔
     if trial_type == 'stoptrials':
         trials = treadmill[treadmill['run_or_stop'] == 0]
@@ -101,7 +101,7 @@ def ISI_population_trials(region,popu_id,trial_type):
     for i in range(len(popu_id)):
         color = neuron_colors[i]  #一个neuron使用同一个color
         unit_id = popu_id[i]
-        spike_times = singleneuron_spiketrain(unit_id)
+        spike_times = singleneuron_spiketimes(unit_id)
         if trial_type == 'stoptrials':
             trials = treadmill[treadmill['run_or_stop'] == 0]
         elif trial_type == 'runtrials':
@@ -150,7 +150,7 @@ def stat_fit_plot(neuron_intervals,region,trial_type):
     plt.savefig(save_path+f"/neurons_{region}_{trial_type}.png",dpi=600,bbox_inches = 'tight')
 
 def ISI_single_neuron_session(region,unit_id):
-    spike_times = singleneuron_spiketrain(unit_id)
+    spike_times = singleneuron_spiketimes(unit_id)
     intervals = np.array([])
     # 如果整个session的spike个数，小于elec_dura电生理时长（s），即每秒钟的spike个数小于1，则不进行统计
     if len(spike_times) > (fr_filter*elec_dura): 

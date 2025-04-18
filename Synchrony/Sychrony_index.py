@@ -70,7 +70,7 @@ def load_syn_index_csv():
     return merged_df
 
 # get single neuron spike train
-def singleneuron_spiketrain(id):
+def singleneuron_spiketimes(id):
     x = np.where(identities == id)
     y=x[0]
     spike_times=np.empty(len(y))
@@ -138,8 +138,8 @@ def synchrony(neurons,marker):
         for comb in combinations:
             neuron_a_id = comb[0]
             neuron_b_id = comb[1]
-            spike_times1 = singleneuron_spiketrain(neuron_a_id)
-            spike_times2 = singleneuron_spiketrain(neuron_b_id)
+            spike_times1 = singleneuron_spiketimes(neuron_a_id)
+            spike_times2 = singleneuron_spiketimes(neuron_b_id)
             synchrony_index = float(0)
             for j in np.arange(1,len(marker['time_interval_left_end']),2):
                 marker_start = marker['time_interval_left_end'].iloc[j]

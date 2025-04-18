@@ -63,7 +63,7 @@ print(f"Treadmill duration: {treadmill_dura}")
 
 # --------- spike train ----------
 # get single neuron spike train
-def singleneuron_spiketrain(id):
+def singleneuron_spiketimes(id):
     x = np.where(identities == id)
     y=x[0]
     spike_times=np.zeros(len(y))
@@ -181,7 +181,7 @@ def binary_spiketrain(id,marker):  #each trial
     bins = np.arange(pre_time, post_time+bin_width, bin_width)   
 
     histograms=spike_counts(
-        singleneuron_spiketrain(id),
+        singleneuron_spiketimes(id),
         bin_edges=bins,
         movement_start_time=marker,
         )
@@ -196,7 +196,7 @@ def firingrate_time(id,marker,duration,bin_width):
     bins = np.arange(pre_time, post_time+bin_width,bin_width)  # bin_width默认 0.14
     # histograms
     histograms=spike_counts(
-        singleneuron_spiketrain(id),
+        singleneuron_spiketimes(id),
         bin_edges=bins,
         movement_start_time=marker,
         )
@@ -232,7 +232,7 @@ def population_spikecounts(neuron_id,marker_start,marker_end,trial_dura,bin):
 
 def popu_sptrain_trial(neuron_ids,marker_start,marker_end):
     for j in range(len(neuron_ids)): #第j个neuron
-        spike_times = singleneuron_spiketrain(neuron_ids[j])
+        spike_times = singleneuron_spiketimes(neuron_ids[j])
         spike_times_trail = spike_times[(spike_times > marker_start) & (spike_times < marker_end)]
         spiketrain = neo.SpikeTrain(spike_times_trail,units='sec',t_start=marker_start, t_stop=marker_end)
         fr = BinnedSpikeTrain(spiketrain, bin_size=fr_bin*pq.ms,tolerance=None)

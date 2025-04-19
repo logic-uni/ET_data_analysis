@@ -52,7 +52,7 @@ fr_filter = 8                # 1  firing rate > 1
 cutoff_distr = 80           # 250ms/None  cutoff_distr=0.25代表截断ISI分布大于0.25s的
 histo_bin_num = 100          # 统计图bin的个数
 
-def singleneuron_spiketrain(id):
+def singleneuron_spiketimes(id):
     x = np.where(identities == id)
     y = x[0]
     spike_times = np.empty(len(y))
@@ -68,7 +68,7 @@ def collect_isi_data(units, exclude_top=0):
     
     for index, row in units.iterrows():
         unit_id = row['cluster_id']  # NP1 is neuron_id, NP2 is cluster_id
-        spike_times = singleneuron_spiketrain(unit_id)
+        spike_times = singleneuron_spiketimes(unit_id)
         spike_count = len(spike_times)  # 直接获取原始发放次数
         
         # 保持原有过滤条件

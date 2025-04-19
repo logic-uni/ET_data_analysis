@@ -53,7 +53,7 @@ print(f"Treadmill duration: {treadmill_dura}")
 
 #### spike train & firing rates
 # get single neuron spike train
-def singleneuron_spiketrain(id):
+def singleneuron_spiketimes(id):
     x = np.where(identities == id)
     y=x[0]
     spike_times=np.zeros(len(y))
@@ -181,7 +181,7 @@ def PETH_heatmap_shorttime(data,id):
 def popu_sptime_trial(neuron_ids,start,end):
     popu_sptime = []
     for j in range(len(neuron_ids)): #第j个neuron
-        spike_times = singleneuron_spiketrain(neuron_ids[j])
+        spike_times = singleneuron_spiketimes(neuron_ids[j])
         spike_times_trail = spike_times[(spike_times > start) & (spike_times < end)]
         align_nu_times = spike_times_trail - start
         popu_sptime.append(align_nu_times)

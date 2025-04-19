@@ -82,15 +82,15 @@ def popu_sptrain_trial(neuron_ids,marker_start,marker_end):
         spiketrain = neo.SpikeTrain(spike_times_trail,units='sec',t_start=marker_start, t_stop=marker_end)
         fr = BinnedSpikeTrain(spiketrain, bin_size=fr_bin*pq.ms,tolerance=None)
         if avoid_spikemore1 == False:
-            one_neruon = fr.to_array().astype(int)[0]
+            one_neuron = fr.to_array().astype(int)[0]
         else:
             fr_binar = fr.binarize()  # 对于可能在1ms内出现两个spike的情况，强制置为该bin下即1ms只能有一个spike
-            one_neruon = fr_binar.to_array().astype(int)[0]
+            one_neuron = fr_binar.to_array().astype(int)[0]
         
         if j == 0:
-            neurons = one_neruon
+            neurons = one_neuron
         else:
-            neurons = np.vstack((neurons, one_neruon))
+            neurons = np.vstack((neurons, one_neuron))
     return neurons
 
 def reduce_dimension(count,bin_size,n_components): # 默认: 0.1 感觉改bin_size影响不大，改firing rate的bin size影响较大

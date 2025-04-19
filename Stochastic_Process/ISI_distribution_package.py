@@ -41,7 +41,7 @@ neuron_num = neurons.count().transpose().values
 
 #### spike train & firing rates
 # get single neuron spike train
-def singleneuron_spiketrain(id):
+def singleneuron_spiketimes(id):
     x = np.where(identities == id)
     y=x[0]
     spike_times=np.zeros(len(y))
@@ -71,7 +71,7 @@ def ISI_distri_single_trial(population,marker,region_name,trail_mode,duration): 
         if diff >= 29:
             result.append(row['time_interval_left_end'])
 
-    spike_times = singleneuron_spiketrain(region_neuron_id[0])
+    spike_times = singleneuron_spiketimes(region_neuron_id[0])
     print(region_neuron_id[0])
     spiketrain_trails = trails_division(result[0],spike_times,duration)
     plot_isi_histogram(spiketrain_trails, cutoff=250*pq.ms, histtype='bar')
@@ -102,7 +102,7 @@ def ISI_distri_trails(population,marker,region_name,trail_mode,duration):  # dur
     print(result)
 
     for id in region_neuron_id:
-        spike_times = singleneuron_spiketrain(id)
+        spike_times = singleneuron_spiketimes(id)
         spiketrain_trails = [trails_division(marker_start,spike_times,duration) for marker_start in result]
         plot_isi_histogram(spiketrain_trails, cutoff=250*pq.ms, histtype='bar', legend=result)
         plt.savefig(fig_save_path+f"/{region_name}/{trail_type}/neuron_id_{id}_ISI_ditribution.png",dpi=600,bbox_inches = 'tight')
@@ -151,7 +151,7 @@ def ISI_distri_population(population,marker,region_name,trail_mode,duration):  #
     popu_spiketrain_trial = []
 
     for id in region_neuron_id:
-        spike_times = singleneuron_spiketrain(id)
+        spike_times = singleneuron_spiketimes(id)
         spiketrain_trails = [trails_division(marker_start,spike_times,duration) for marker_start in result]  #单个神经元多个trial的spike train list
         popu_spiketrain_trial.append(spiketrain_trails)  #每个神经元的 多个trial的spike train list 作为元素 拼接起来
 

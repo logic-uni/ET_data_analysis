@@ -22,7 +22,7 @@ fr_bin = 1  # unit: ms
 fs = 1000 / fr_bin  # fr sample rate = 1000ms / bin size 如果bin是10ms，则采样率为100hz，根据香农采样定理，FFT时候会自动把最大频率确定在100hz以内
 freq_low, freq_high = 1, 25
 neuron_id = 1
-
+freqs = np.arange(freq_low, freq_high+0.1, 0.1)
 ### ------------------ Load Data-------------------
 
 ## --------- NP2 ----------
@@ -207,6 +207,7 @@ def enumarate_neurons(start,end,trial_type):
         unit_id = int(unit_id)
         spiketrain = neuron_spiketrain(unit_id,start,end)
         positive_freq, magnitude = ACF(spiketrain,start,end,trial_type,unit_id)
+        print(positive_freq)
         promi = prominance_compute(positive_freq, magnitude)
         #promi = promi * promi * promi
         current_sum += promi  # Accumulate 

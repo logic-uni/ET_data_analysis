@@ -1,7 +1,7 @@
 """
 # coding: utf-8
 @author: Yuhao Zhang
-last updated: 04/16/2025
+last updated: 04/20/2025
 data from: Xinchao Chen
 """
 
@@ -15,7 +15,7 @@ from scipy.optimize import curve_fit
 from scipy.stats import norm
 from scipy.signal import find_peaks
 
-mice_name = '20250310_VN_control'  # 20250310_VN_control 20250310_VN_harmaline  20250310_VN_tremor
+mice_name = '20250310_VN_tremor'  # 20250310_VN_control 20250310_VN_harmaline  20250310_VN_tremor
 
 # ------- NO NEED CHANGE -------
 fs = 30000  # 30 kHz for NP2
@@ -24,8 +24,8 @@ lfp_data = np.load(f"/data1/zhangyuhao/xinchao_data/NP2/{mice_name}/LFP_npy/{mic
 sorting_path = f"/data1/zhangyuhao/xinchao_data/NP2/{mice_name}/Sorted/"
 identities = np.load(sorting_path + '/spike_clusters.npy') # time series: unit id of each spike
 times = np.load(sorting_path + '/spike_times.npy')  # time series: spike time of each spike
-neurons = pd.read_csv(f"/data1/zhangyuhao/xinchao_data/NP2/{mice_name}/filtered_quality_metrics.csv")  # QC neurons
-#neurons = pd.read_csv(sorting_path + '/cluster_group.tsv', sep='\t')   # all neurons
+#neurons = pd.read_csv(f"/data1/zhangyuhao/xinchao_data/NP2/{mice_name}/filtered_quality_metrics.csv")  # QC neurons
+neurons = pd.read_csv(sorting_path + '/cluster_group.tsv', sep='\t')   # all neurons
 print(neurons)
 print(f"LFP duration: {lfp_data.shape[1]/fs}")
 print(f"AP duration: {times[-1] / fs}")
@@ -160,7 +160,7 @@ def accumulate():
             '''
             # Option 2 peak detection and prominance calculate
             promi = prominan(vs)
-            #promi = promi * promi * promi
+            promi = promi * promi * promi
             current_sum += promi  # Accumulate smoothed vector strength
             #current_sum_subt = current_sum - np.min(current_sum)  # normalize for ploting heatmap
             current_sum_history.append(current_sum.copy())  # 保存当前状态

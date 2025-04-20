@@ -14,6 +14,7 @@ from ast import literal_eval
 from elephant.conversion import BinnedSpikeTrain
 import os
 import warnings
+from scipy.signal import find_peaks
 np.set_printoptions(threshold=np.inf)
 np.seterr(divide='ignore',invalid='ignore')
 
@@ -86,7 +87,6 @@ def ACF(data,start,end,trial_type,unit_id):
     sample_rate = 1000  # 采样率1000Hz
     max_lag_time = 1    # 最大滞后时间1秒
     frequency_resolution = 0.1  # 频率分辨率0.1Hz
-
     # 计算对应的样本数和FFT长度
     max_lag_samples = int(max_lag_time * sample_rate)
     n_fft = int(sample_rate / frequency_resolution)  # 10000点FFT
@@ -94,7 +94,8 @@ def ACF(data,start,end,trial_type,unit_id):
     acf_full = np.correlate(data, data, mode='full')
     # 提取滞后0到max_lag_samples部分
     acf = acf_full[len(data)-1 : len(data)-1 + max_lag_samples + 1]
-    # -------------------- 绘制自相关函数图 --------------------
+    '''
+    # -------------------- 自相关函数图 --------------------
     time_lags = np.arange(max_lag_samples + 1) / sample_rate  # 将滞后转换为秒
     plt.plot(time_lags, acf, color='blue')
     plt.xlabel("Lag Time (s)", fontsize=12)
@@ -105,33 +106,37 @@ def ACF(data,start,end,trial_type,unit_id):
     plt.tight_layout()
     plt.savefig(os.path.join(save_path, f'{start}_{end}_{trial_type}_Neuron_id_{unit_id}_ACF.png'))
     plt.clf()
-    # -------------------- 后续FFT处理（原代码） --------------------
+    '''
+    # -------------------- FFT -------------------
     # 应用FFT并补零到n_fft以提升频率分辨率
     fft_acf = np.fft.fft(acf, n=n_fft)
-
-    # 计算频率轴
     freq = np.fft.fftfreq(n_fft, d=1/sample_rate)
     # 获取非负频率部分
     positive_freq = freq[:n_fft//2]
     magnitude = np.abs(fft_acf[:n_fft//2])  # 取幅度谱
-
+    # Filter frequencies within the desired range
+    freq_mask = (positive_freq >= freq_low) & (positive_freq <= freq_high)
+    positive_freq = positive_freq[freq_mask]
+    magnitude = magnitude[freq_mask]
+    '''
     plt.plot(positive_freq, magnitude)
     plt.xlabel('Frequency (Hz)')
     plt.ylabel('Magnitude')
     plt.title('FFT of ACF with 0.1 Hz Resolution')
-    plt.xlim(freq_low, freq_high)
     plt.tight_layout()
     plt.savefig(os.path.join(save_path, f'{start}_{end}_{trial_type}_Neuron_id_{unit_id}_ACF_FFT.png'))
     plt.clf()
+    '''
+    return positive_freq,magnitude
 
-def prominance_compute():
+def prominance_compute(freqs,spec):
     #  Peak detection with 1%‐of‐mean prominence
-    prom_thresh = 0.01 * np.mean(spec_smooth)
-    peaks, props = find_peaks(spec_smooth, prominence=prom_thresh)
+    prom_thresh = 0.01 * np.mean(spec)
+    peaks, props = find_peaks(spec, prominence=prom_thresh)
 
     #  Collect peak info
     peak_freqs       = freqs[peaks]
-    peak_heights     = spec_smooth[peaks]
+    peak_heights     = spec[peaks]
     peak_prominences = props['prominences']
 
     prominence_array = np.zeros_like(freqs)
@@ -141,14 +146,7 @@ def prominance_compute():
     print(prominence_array)
     return prominence_array
 
-
-def prominance():
-            promi = prominan(vs)
-            #promi = promi * promi * promi
-            current_sum += promi  # Accumulate smoothed vector strength
-            #current_sum_subt = current_sum - np.min(current_sum)  # normalize for ploting heatmap
-            current_sum_history.append(current_sum.copy())  # 保存当前状态
-    
+def prominance_plot(freqs,current_sum_history):
     # 转换为二维数组（神经元数 x 频率）
     data = np.array(current_sum_history)
 
@@ -201,12 +199,21 @@ def prominance():
     plt.close()
 
 def enumarate_neurons(start,end,trial_type):
+    current_sum = np.zeros_like(freqs, dtype=np.float32)
+    current_sum_history = []  # 用于保存每个步骤的累积向量强度
     # NP2
     for index, row in neurons.iterrows():
         unit_id = row['cluster_id']
         unit_id = int(unit_id)
         spiketrain = neuron_spiketrain(unit_id,start,end)
-        ACF(spiketrain,start,end,trial_type,unit_id)
+        positive_freq, magnitude = ACF(spiketrain,start,end,trial_type,unit_id)
+        promi = prominance_compute(positive_freq, magnitude)
+        #promi = promi * promi * promi
+        current_sum += promi  # Accumulate 
+        #current_sum_subt = current_sum - np.min(current_sum)  # normalize for ploting heatmap
+        current_sum_history.append(current_sum.copy())  # 保存当前状态
+
+    prominance_plot(freqs,current_sum_history)
     '''
     # NP1
     result = neurons.groupby('region')['cluster_id'].apply(list).reset_index(name='cluster_ids')

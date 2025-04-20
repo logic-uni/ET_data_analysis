@@ -36,6 +36,16 @@ treadmill_dura = treadmill_origin['time_interval_right_end'].iloc[-1]
 print(f"Electrophysiology duration: {elec_dura}")
 print(f"Treadmill duration: {treadmill_dura}")
 
+def singleneuron_spiketimes(id):
+    x = np.where(identities == id)
+    y=x[0]
+    spike_times=np.zeros(len(y))
+    for i in range(0,len(y)):
+        z=y[i]
+        spike_times[i]=times[z]/sample_rate
+    return spike_times
+
+
 def build_time_window_domain(bin_edges, offsets, callback=None):
     callback = (lambda x: x) if callback is None else callback
     domain = np.tile(bin_edges[None, :], (len(offsets), 1))
@@ -123,7 +133,7 @@ def binary_spiketrain(id,marker):  #each trial
     bins = np.arange(pre_time, post_time+bin_width, bin_width)   
 
     histograms=spike_counts(
-        singleneuron_spiketrain(id),
+        singleneuron_spiketimes(id),
         bin_edges=bins,
         movement_start_time=marker,
         )
@@ -138,7 +148,7 @@ def firingrate_time(id,marker,duration,bin_width):
     bins = np.arange(pre_time, post_time+bin_width,bin_width)  # bin_width默认 0.14
     # histograms
     histograms=spike_counts(
-        singleneuron_spiketrain(id),
+        singleneuron_spiketimes(id),
         bin_edges=bins,
         movement_start_time=marker,
         )

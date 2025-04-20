@@ -1,7 +1,7 @@
 """
 # coding: utf-8
 @author: Yuhao Zhang
-last updated: 04/18/2025
+last updated: 04/19/2025
 data from: Xinchao Chen
 """
 import neo
@@ -13,22 +13,24 @@ from matplotlib.pyplot import *
 from ast import literal_eval
 from elephant.conversion import BinnedSpikeTrain
 import os
+import warnings
 np.set_printoptions(threshold=np.inf)
 np.seterr(divide='ignore',invalid='ignore')
 
 fr_bin = 10  # unit: ms
-fs = 1000 / fr_bin  # # fr sample rate = 1000ms / bin size
-freq_low, freq_high = 25, 120
-neuron_id = 14
+fs = 1000 / fr_bin  # fr sample rate = 1000ms / bin size 如果bin是10ms，则采样率为100hz，根据香农采样定理，FFT时候会自动把最大频率确定在100hz以内
+freq_low, freq_high = 1, 25
+neuron_id = 1
 
 ### ------------------ Load Data-------------------
 
 ## --------- NP2 ----------
-mice_name = '20250310_VN_tremor'
+mice_name = '20250310_VN_control'
 sorting_path = f"/data1/zhangyuhao/xinchao_data/NP2/{mice_name}/Sorted/"
-save_path = f"/home/zhangyuhao/Desktop/Result/ET/Fr_FFT/NP2/{mice_name}/"
-neurons = pd.read_csv(sorting_path + '/cluster_group.tsv', sep='\t')  
+neurons = pd.read_csv(f"/data1/zhangyuhao/xinchao_data/NP2/{mice_name}/filtered_quality_metrics.csv")  # QC neurons
+#neurons = pd.read_csv(sorting_path + '/cluster_group.tsv', sep='\t')   # all neurons
 marker = pd.read_csv(f"/data1/zhangyuhao/xinchao_data/NP2/{mice_name}/Marker/static_motion_segement.csv")
+save_path = f"/home/zhangyuhao/Desktop/Result/ET/Spikecounts_FFT/NP2/{mice_name}/"
 
 '''
 ## --------- NP1 ----------
@@ -71,41 +73,86 @@ def singleneuron_spiketimes(id):
         spike_times[i]=times[z]/sample_rate
     return spike_times
 
-def neuron_fr_trial(neuron_id,marker_start,marker_end,type):
+## -------- FFT ---------
+def neuron_spikecounts(neuron_id,marker_start,marker_end):
     spike_times = singleneuron_spiketimes(neuron_id)
     spike_times_trail = spike_times[(spike_times > marker_start) & (spike_times < marker_end)]
     spiketrain = neo.SpikeTrain(spike_times_trail,units='sec',t_start=marker_start, t_stop=marker_end)
-    fr = BinnedSpikeTrain(spiketrain, bin_size=fr_bin*pq.ms,tolerance=None)
+    fr = BinnedSpikeTrain(spiketrain, bin_size=fr_bin*pq.ms,tolerance=None)  # had been qualified that elephant can generate correct spike counts
     trial_neuron_fr = fr.to_array().astype(int)[0]
-    print("hhhhhhh")
-    print(trial_neuron_fr)
-    window = np.hanning(len(trial_neuron_fr))  # 正确函数名为 hanning()
-    windowed_data = trial_neuron_fr * window
-    # Perform FFT on trial_neruon_fr
+    return trial_neuron_fr
+
+def FFT(data,content):
+    window = np.hanning(len(data))
+    windowed_data = data * window
     fft_result = np.fft.fft(windowed_data)
-    freqs = np.fft.fftfreq(len(windowed_data), 1/fs)  
-    # Focus on the frequency range of interest
+    freqs = np.fft.fftfreq(len(windowed_data), 1/fs)
     freq_mask = (freqs >= freq_low) & (freqs <= freq_high)
     fft_filtered = fft_result[freq_mask]
     freqs_filtered = freqs[freq_mask]
-    # Plot the FFT result
     plt.plot(freqs_filtered, np.abs(fft_filtered))
     plt.xlabel('Frequency (Hz)')
     plt.ylabel('Amplitude')
-    plt.title(f'FFT of Neuron {neuron_id} (Trial {marker_start}-{marker_end})')
-    plt.savefig(os.path.join(save_path, f'Neuron_id_{neuron_id}_trial_{marker_start}_{marker_end}_{type}.png'))
+    plt.title(f'FFT {content}')
+    plt.savefig(os.path.join(save_path, f'{content}.png'))
     plt.clf()
 
-def enumerate_neurons(start,end,trial_type):
+def popu_spikecounts(start,end):
+    # NP2
+    for index, row in neurons.iterrows():
+        unit_id = row['cluster_id']
+        spikecount = neuron_spikecounts(unit_id,start,end)
+        if index == 0:
+            all_spikecounts = np.array([spikecount])
+        else:
+            all_spikecounts = np.vstack((all_spikecounts, spikecount))
+    '''
+    # NP1
     result = neurons.groupby('region')['cluster_id'].apply(list).reset_index(name='cluster_ids')
     for index, row in result.iterrows():
         region = row['region']
         popu_ids = row['cluster_ids']
         if region == region_name:
             for j in range(len(popu_ids)): #第j个neuron
-                neuron_fr_trial(popu_ids[j],start,end,trial_type)
+                spikecount = neuron_spikecounts(popu_ids[j],start,end)
+                if j == 0:
+                    all_spikecounts = np.array([spikecount])
+                else:
+                    all_spikecounts = np.vstack((all_spikecounts, spikecount))
+    '''
+    return all_spikecounts
 
-def main():
+def tiny_range_popusc(spec_start,spec_end,trial_type):
+    start = spec_start
+    end = spec_end
+    while start < spec_end:
+        end = start + 0.5
+        if end > spec_end:
+            end = spec_end
+        popu_sc = popu_spikecounts(start, end)
+        sum_sc = np.sum(popu_sc, axis=0)
+        time = np.linspace(start, end, len(sum_sc))
+        plt.plot(time, sum_sc)
+        plt.title(f'Spike counts of summed neurons ({start}-{end}s)')
+        plt.xlabel('Time (s)')
+        plt.ylabel('Spike counts')
+        plt.savefig(os.path.join(save_path, f'sum_all_units_{start}_{end}_{trial_type}.png'))
+        plt.clf()
+        start += 0.5
+
+def spec_range_popusc(start,end,trial_type):
+    popu_sc = popu_spikecounts(start, end)
+    sum_sc = np.sum(popu_sc, axis=0)
+    time = np.linspace(start, end, len(sum_sc))
+    plt.plot(time, sum_sc)
+    plt.title(f'Spike counts of summed neurons ({start}-{end}s)')
+    plt.xlabel('Time (s)')
+    plt.ylabel('Spike counts')
+    plt.savefig(os.path.join(save_path, f'sum_all_units_{start}_{end}_{trial_type}.png'))
+    plt.clf()
+    FFT(sum_sc,f'sum_all_units_{start}_{end}_{trial_type}_FFT')
+
+def enumarate_trials():
     plt.figure(figsize=(10, 6))
     for index, row in marker.iterrows():
         start = row['time_interval_left_end']
@@ -117,7 +164,18 @@ def main():
             trial_type = 'static'
         else:
             trial_type = 'run'
-        neuron_fr_trial(neuron_id,start,end,trial_type)
-        #enumerate_neurons(start,end,trial_type)
+        #neuron_spikecounts(neuron_id,start,end)
+        popu_sc = popu_spikecounts(start,end)
+        sum_sc = np.sum(popu_sc, axis=0)
+        time = np.linspace(start, end, len(sum_sc))
+        plt.plot(time,sum_sc)
+        plt.title('Spike counts of sumed neurons')
+        plt.xlabel('time')
+        plt.ylabel('Spike counts')
+        plt.savefig(os.path.join(save_path, f'sum_all_units_{start}_{end}_{trial_type}.png'))
+        plt.clf()
+        FFT(sum_sc,f'sum_all_units_{start}_{end}_{trial_type}_FFT')
 
-main()
+enumarate_trials()
+#tiny_range_popusc(40,350,'locomotion')
+#spec_range_popusc(40,350,'run')

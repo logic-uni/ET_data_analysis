@@ -14,16 +14,19 @@ import seaborn as sns
 from scipy.signal import spectrogram
 from matplotlib import cm
 from scipy.signal import iirnotch, filtfilt
+from scipy.ndimage import gaussian_filter
+from scipy.optimize import curve_fit
+from scipy.stats import norm
+from scipy.signal import find_peaks
+
 np.set_printoptions(threshold=np.inf)
 
 # ------- NEED CHANGE -------
 ####这个千万别忘了开或者关LFP截断
-mice_name = '20230523_Syt2_conditional_tremor_mice1'
-LFP_file = 'Pontine reticular nucleus caudal part.npy'
-region_name = 'Pontine reticular nucleus caudal part'
-# this para is for previous codes
-#freq_low = 2
-#freq_high = 500
+mice_name = '20230113_littermate'
+LFP_file = 'Lobules IV-V.npy'
+region_name = 'Lobules IV-V'
+freq_low, freq_high = 8, 30
 
 # ------- NO NEED CHANGE -------
 sample_rate = 2500  #spikeGLX neuropixel LFP sample rate
@@ -366,9 +369,145 @@ def analyze_all_bands(data, state, trial, sample_rate=2500):
         )
 
 def fq_spectrum(data, state, trial, sample_rate=2500, title_suffix=""):
-    freq_low, freq_high = 16, 40
     n_channels, n_samples = data.shape
+    # 汉宁窗
+    window = np.hanning(n_samples)
+    window_correction = np.sum(window)  # 窗能量补偿系数
+    # 计算正频率
+    freqs = np.fft.rfftfreq(n_samples, 1/sample_rate)
+    freq_mask = (freqs >= freq_low) & (freqs <= freq_high)
+    freqs = freqs[freq_mask]
+    # 逐通道处理
+    all_spectra = []
+    for i in range(n_channels):
+        # 加窗FFT
+        fft_result = np.fft.rfft(data[i] * window)
+        # 幅值补偿
+        spectrum = np.abs(fft_result[freq_mask]) * 2 / window_correction
+        all_spectra.append(spectrum)
+        # 绘图设置（保持原可视化参数）
+        linewidth = 1.5 if i in [0, n_channels//2, n_channels-1] else 0.8
+        plt.plot(freqs, spectrum, 
+                 color=cm.viridis(i/n_channels),
+                 alpha=0.7,
+                 linewidth=linewidth,
+                 label=f'Ch{i+1}' if i % 10 == 0 else "")
+        
+    plt.xlabel('Frequency (Hz)', fontsize=12)
+    plt.ylabel('Amplitude', fontsize=12)
+    plt.xlim(freq_low, freq_high)
+    plt.ylim(0, np.max(all_spectra)*1.1)
+    plt.grid(True, linestyle='--', alpha=0.4)
     
+    ax = plt.gca()  # 获取当前轴
+    sm = plt.cm.ScalarMappable(cmap=cm.viridis, norm=plt.Normalize(vmin=1, vmax=n_channels))
+    sm.set_array([])
+    cbar = plt.colorbar(sm, ax=ax, pad=0.02)  # 显式传递ax参数
+    cbar.set_label('Channel Number', rotation=270, labelpad=15)
+    
+    title = f'Multi-channel Spectrum ({freq_low}-{freq_high}Hz){title_suffix}'
+    plt.title(title, fontsize=14, pad=20)
+    plt.legend(loc='upper right', fontsize=8, ncol=3)
+    plt.tight_layout()
+    plt.savefig(save_path+f"/spectrum/{region_name}_{state}_trial{trial}.png")
+    plt.clf()
+
+def fq_heatmap(data, state, trial, sample_rate=2500, title_suffix=""):
+    n_channels, n_samples = data.shape
+
+    # 计算正频率
+    freqs = np.fft.rfftfreq(n_samples, 1/sample_rate)
+    freq_mask = (freqs >= freq_low) & (freqs <= freq_high)
+    freqs = freqs[freq_mask]
+    
+    window = np.hanning(n_samples)
+
+    all_spectra = []
+    for i in range(n_channels):
+        fft_result = np.fft.rfft(data[i] * window)  # 加窗处理
+        spectrum = np.abs(fft_result[freq_mask])   # 或计算功率谱: np.abs(fft_result[freq_mask])​**​2
+        all_spectra.append(spectrum)
+    all_spectra = np.array(all_spectra)
+
+    plt.title(f'Multi-channel Spectrum Heatmap ({freq_low}-{freq_high}Hz){title_suffix}', fontsize=14, pad=20)
+    X, Y = np.meshgrid(freqs, np.arange(n_channels))
+    pc = plt.pcolormesh(X, Y, all_spectra,
+                       shading='auto',
+                       cmap='plasma')
+    # 保证通道0在底部
+    plt.gca().invert_yaxis()
+    
+    cbar = plt.colorbar(pc, pad=0.02)
+    cbar.set_label('Amplitude', rotation=270, labelpad=20)
+    
+    plt.xlabel('Frequency (Hz)', fontsize=12)
+    plt.ylabel('Channel Number', fontsize=12)
+    plt.xlim(freq_low, freq_high)
+    plt.yticks(np.arange(0, n_channels, 10), fontsize=8)
+    title = f'Multi-channel Spectrum Heatmap ({freq_low}-{freq_high}Hz){title_suffix}'
+    plt.title(title, fontsize=14, pad=20)
+    plt.tight_layout()
+    plt.savefig(save_path+f"/heatmap/{region_name}_{state}_trial{trial}_heatmap.png")
+    plt.clf()
+
+def prominan(freqs,spectrum):
+    # 1) Define exponential background model: A·exp(−B·x) + C
+    def exp_background(x, A, B, C):
+        return A * np.exp(-B * x) + C
+
+    # 2) Choose initial guesses
+    A0 = spectrum.max() - spectrum.min()
+    B0 = 1e-3  # assume slow decay
+    C0 = np.percentile(spectrum, 5)  # a little above the absolute min to avoid log issues
+
+    p0 = [A0, B0, C0]
+
+    # 3) Set bounds: A≥0, B≥0, C≥0
+    lower = [0, 0, 0]
+    upper = [np.inf, np.inf, np.inf]
+
+    # 4) Fit with more function evaluations
+    try:
+        popt, pcov = curve_fit(
+            exp_background, freqs, spectrum,
+            p0=p0, bounds=(lower, upper),
+            maxfev=5000
+        )
+        background = exp_background(freqs, *popt)
+    except RuntimeError:
+        # Fallback: use flat background at the 5th percentile
+        popt = [np.nan, np.nan, C0]
+        background = np.full_like(spectrum, fill_value=C0)
+        print("Warning: exponential fit failed – using constant background.")
+
+    # 5) Subtract background
+    spec_corrected = spectrum - background
+
+    # 6) Smooth with Gaussian‐weighted moving average
+    window_size = 31
+    x_gauss = np.linspace(-3, 3, window_size)
+    gauss_kernel = norm.pdf(x_gauss)
+    gauss_kernel /= gauss_kernel.sum()
+    spec_smooth = np.convolve(spec_corrected, gauss_kernel, mode='same')
+
+    # 7) Peak detection with 1%‐of‐mean prominence
+    prom_thresh = 0.01 * np.mean(spec_smooth)
+    peaks, props = find_peaks(spec_smooth, prominence=prom_thresh)
+
+    # 8) Collect peak info
+    peak_freqs       = freqs[peaks]
+    peak_heights     = spec_smooth[peaks]
+    peak_prominences = props['prominences']
+
+    prominence_array = np.zeros_like(freqs)
+    for freq, prom in zip(peak_freqs, peak_prominences):
+        idx = np.argmin(np.abs(freqs - freq))  # Find the closest index in freqs
+        prominence_array[idx] = prom
+
+    return prominence_array
+
+def fq_each_trial_spectrum(data, state, trial, sample_rate=2500, title_suffix=""):
+    n_channels, n_samples = data.shape
     # 汉宁窗
     window = np.hanning(n_samples)
     window_correction = np.sum(window)  # 窗能量补偿系数
@@ -385,95 +524,17 @@ def fq_spectrum(data, state, trial, sample_rate=2500, title_suffix=""):
         fft_result = np.fft.rfft(data[i] * window)
         # 幅值补偿
         spectrum = np.abs(fft_result[freq_mask]) * 2 / window_correction
-        all_spectra.append(spectrum)
+        promi = prominan(freqs,spectrum)
+        promi = promi * promi * promi
+        if i == 0: current_sum = np.zeros_like(freqs, dtype=np.float32)
+        current_sum += promi  # Accumulate smoothed vector strength
+        #current_sum_subt = current_sum - np.min(current_sum)  # normalize for ploting heatmap
         
-        # 绘图设置（保持原可视化参数）
-        linewidth = 1.5 if i in [0, n_channels//2, n_channels-1] else 0.8
-        plt.plot(freqs, spectrum, 
-                 color=cm.viridis(i/n_channels),
-                 alpha=0.7,
-                 linewidth=linewidth,
-                 label=f'Ch{i+1}' if i % 10 == 0 else "")
-           
-    # 标记重要频段 (Theta: 4-8Hz, Alpha: 8-12Hz)
-    #plt.axvspan(4, 8, color='green', alpha=0.1, label='Theta (4-8Hz)')
-    #plt.axvspan(8, 12, color='blue', alpha=0.1, label='Alpha (8-12Hz)')
-    
-    # 设置图形属性
-    plt.xlabel('Frequency (Hz)', fontsize=12)
-    plt.ylabel('Amplitude', fontsize=12)
-    plt.xlim(freq_low, freq_high)
-    plt.ylim(0, np.max(all_spectra)*1.1)
-    plt.grid(True, linestyle='--', alpha=0.4)
-    
-    # 添加颜色条表示通道编号
-    sm = plt.cm.ScalarMappable(cmap=cm.viridis, norm=plt.Normalize(vmin=1, vmax=n_channels))
-    sm.set_array([])
-    cbar = plt.colorbar(sm, pad=0.02)
-    cbar.set_label('Channel Number', rotation=270, labelpad=15)
-    
-    # 设置标题和图例
-    title = f'Multi-channel Spectrum ({freq_low}-{freq_high}Hz){title_suffix}'
-    plt.title(title, fontsize=14, pad=20)
-    plt.legend(loc='upper right', fontsize=8, ncol=3)
-    
-    plt.tight_layout()
-    plt.savefig(save_path+f"/spectrum/{region_name}_{state}_trial{trial}.png")
+    plt.plot(freqs, current_sum)
+    plt.savefig(save_path+f"/spectrum/promi_{region_name}_{state}_trial{trial}.png")
     plt.clf()
 
-def fq_heatmap(data, state, trial, sample_rate=2500, title_suffix=""):
-    freq_low, freq_high = 16, 40
-    n_channels, n_samples = data.shape
-
-    # 计算正频率
-    freqs = np.fft.rfftfreq(n_samples, 1/sample_rate)
-    freq_mask = (freqs >= freq_low) & (freqs <= freq_high)
-    freqs = freqs[freq_mask]
-    
-    # 添加汉宁窗
-    window = np.hanning(n_samples)
-
-    # 逐通道处理
-    all_spectra = []
-    for i in range(n_channels):
-        fft_result = np.fft.rfft(data[i] * window)  # 加窗处理
-        spectrum = np.abs(fft_result[freq_mask])   # 或计算功率谱: np.abs(fft_result[freq_mask])​**​2
-        all_spectra.append(spectrum)
-    all_spectra = np.array(all_spectra)
-
-    # 绘图部分保持不变，调整标题
-    plt.title(f'Multi-channel Spectrum Heatmap ({freq_low}-{freq_high}Hz){title_suffix}', fontsize=14, pad=20)
-    # 生成坐标网格
-    X, Y = np.meshgrid(freqs, np.arange(n_channels))
-
-    pc = plt.pcolormesh(X, Y, all_spectra,
-                       shading='auto',
-                       cmap='plasma')
-    
-    # 保证通道0在底部
-    plt.gca().invert_yaxis()
-    
-    # 添加颜色条
-    cbar = plt.colorbar(pc, pad=0.02)
-    cbar.set_label('Amplitude', rotation=270, labelpad=20)
-    
-    # 设置坐标轴
-    plt.xlabel('Frequency (Hz)', fontsize=12)
-    plt.ylabel('Channel Number', fontsize=12)
-    plt.xlim(freq_low, freq_high)
-    
-    # 设置刻度
-    plt.yticks(np.arange(0, n_channels, 10), fontsize=8)
-    
-    # 设置标题
-    title = f'Multi-channel Spectrum Heatmap ({freq_low}-{freq_high}Hz){title_suffix}'
-    plt.title(title, fontsize=14, pad=20)
-    
-    plt.tight_layout()
-    plt.savefig(save_path+f"/heatmap/{region_name}_{state}_trial{trial}_heatmap.png")
-    plt.clf()
-
-def each_trial_FFT_previous():
+def main():
     plt.figure(figsize=(14, 8))
     for i in range(0,len(treadmill['run_or_stop'])):
         start = int(treadmill['time_interval_left_end'].iloc[i]*sample_rate)   #乘以采样率，转换为采样点
@@ -483,9 +544,11 @@ def each_trial_FFT_previous():
         else: state_name = 'run'
         #读取each trial的LFP
         trail_LFP = LFP[:, start:end]
+        fq_each_trial_spectrum(trail_LFP, state_name, i)
+
         #analyze_all_bands()
-        fq_spectrum(trail_LFP, state_name, i)
-        fq_heatmap(trail_LFP, state_name, i)
+        #fq_spectrum(trail_LFP, state_name, i)
+        #fq_heatmap(trail_LFP, state_name, i)
         
         #filtered_data = enhanced_notch_filter(trail_LFP)  # 应用增强型陷波滤波器
         '''
@@ -500,7 +563,10 @@ def each_trial_FFT_previous():
         plt.clf()
         '''
 
-each_trial_FFT_previous()
+main()
+
+
+
 
 ## trails
 # 当前脑区，所有channel的信号、频谱图（峰值图、热图）、主频率、channel之间的相位差矩阵，区分运动静止

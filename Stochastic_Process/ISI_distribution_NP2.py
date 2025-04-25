@@ -13,7 +13,7 @@ from scipy.signal import find_peaks
 np.set_printoptions(threshold=np.inf)
 np.seterr(divide='ignore',invalid='ignore')
 
-mice_name = '20250310_VN_tremor'
+mice_name = '20250310_VN_harmaline'  # 20250310_VN_harmaline
 # ------- NEED CHANGE -------
 sorting_path = f"/data1/zhangyuhao/xinchao_data/NP2/{mice_name}/Sorted/"
 save_path = f"/home/zhangyuhao/Desktop/Result/ET/ISI/NP2/{mice_name}/"
@@ -104,8 +104,8 @@ def classify_isi_distribution(intervals, bin_num=100):
     is_poisson = (
         len(peaks) <= 1 and           
         main_peak_pos <= 10 and       # 主峰位置放宽
-        skewness > 0.8 and            # 偏度要求降低
-        kurt > 2                      # 峰度要求降低
+        skewness > 0.3 and            # 偏度要求降低
+        kurt > 1                      # 峰度要求降低
     )
     
     return not is_poisson

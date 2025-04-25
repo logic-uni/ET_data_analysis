@@ -33,7 +33,7 @@ print(f"Electrophysiology duration: {elec_dura}")
 print(f"Treadmill duration: {treadmill_dura}")
 '''
 # ------- NP2 -------
-mice_name = '20250310_VN_tremor'
+mice_name = '20250310_VN_harmaline' # 20250310_VN_harmaline
 sorting_path = f"/data1/zhangyuhao/xinchao_data/NP2/{mice_name}/Sorted/"
 ### electrophysiology
 sample_rate = 30000 #spikeGLX neuropixel sample rate

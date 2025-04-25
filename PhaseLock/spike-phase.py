@@ -28,9 +28,9 @@ print(f"AP duration: {times[-1] / fs}")
 save_path = f"/home/zhangyuhao/Desktop/Result/ET/Spike_Phase/NP2/{mice_name}/"  
 
 # truncated focused time interval
-trunc_left = 474
-trunc_right = 528
-lfp_trunc = lfp_data[:, trunc_left*fs:trunc_right*fs]
+#trunc_left = 529
+#trunc_right = 692
+#lfp_trunc = lfp_data[:, trunc_left*fs:trunc_right*fs]
 # -------------------------------
 # Parameters
 # -------------------------------
@@ -154,8 +154,8 @@ def main():
                 print("Done! Polarity Indices:", polarity_indices)
 
 def speci_neuron_phase():
-    spike_times = singleneuron_spiketimes(5)
-    polarity_indices = process_all_channels(lfp_data, spike_times, fs, 5)
+    spike_times = singleneuron_spiketimes(116)
+    polarity_indices = process_all_channels(lfp_data, spike_times, fs, 116)
     print("Done! Polarity Indices:", polarity_indices)
 
 #main()

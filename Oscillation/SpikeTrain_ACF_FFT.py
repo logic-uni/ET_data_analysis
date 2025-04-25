@@ -24,7 +24,7 @@ freq_low, freq_high = 1, 25
 neuron_id = 1
 freqs = np.arange(freq_low, freq_high+0.1, 0.1)
 ### ------------------ Load Data-------------------
-
+'''
 ## --------- NP2 ----------
 mice_name = '20250310_VN_tremor'
 sorting_path = f"/data1/zhangyuhao/xinchao_data/NP2/{mice_name}/Sorted/"
@@ -51,7 +51,7 @@ neurons = pd.read_csv(f"/data1/zhangyuhao/xinchao_data/NP1/{mice_name}/Sorted/Ea
 #neurons = pd.read_csv(sorting_path + '/neuron_id_region_firingrate.csv')  # different sorting have different nueron id
 #marker = pd.read_csv(f"/data1/zhangyuhao/xinchao_data/NP1/{mice_name}/Marker/treadmill_move_stop_velocity_segm_trial.csv",index_col=0)
 marker = pd.read_csv(f"/data1/zhangyuhao/xinchao_data/NP1/{mice_name}/Marker/treadmill_move_stop_velocity.csv",index_col=0)
-'''
+
 
 # ---------- Load electrophysiology data ----------
 sample_rate = 30000 #spikeGLX neuropixel sample rate
@@ -59,19 +59,16 @@ identities = np.load(sorting_path + '/spike_clusters.npy') # time series: unit i
 times = np.load(sorting_path + '/spike_times.npy')  # time series: spike time of each spike
 print("Test if electrophysiology duration is equal to treadmill duration ...")
 print(f"Marker duration: {marker['time_interval_right_end'].iloc[-1]}")
-
-## Change NP1 or NP2
-print(f"Electrophysiology duration: {times[-1] / sample_rate}")     # NP2
-#print(f"Electrophysiology duration: {(times[-1] / sample_rate)[0]}")  # NP1
+print(f"Electrophysiology duration: {times[-1] / sample_rate}")
 
 ### ------------------ Main Program -------------------
 def singleneuron_spiketimes(id):
     x = np.where(identities == id)
-    y=x[0]
-    spike_times=np.zeros(len(y))
+    y = x[0]
+    spike_times = np.zeros(len(y))
     for i in range(0,len(y)):
-        z=y[i]
-        spike_times[i]=times[z]/sample_rate
+        z = y[i]
+        spike_times[i] = times[z]/sample_rate
     return spike_times
 
 ## -------- FFT ---------
@@ -241,4 +238,4 @@ def enumarate_trials():
             trial_type = 'run'
         enumarate_neurons(start,end,trial_type)
 
-enumarate_trials()
+#enumarate_trials()

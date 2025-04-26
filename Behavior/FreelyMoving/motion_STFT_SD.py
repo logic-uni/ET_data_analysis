@@ -4,26 +4,17 @@
 last updated: 04/26/2025
 data from: Xinchao Chen
 """
-## Most Important, FFT of LFP signal must add Window, without that will get fault result
+## Most Important, FFT of non-stationary signal must add Window, without that will get fault result
 from scipy.fft import fft, fftfreq  
 from scipy import signal
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.signal import spectrogram
-from matplotlib import cm
 from scipy.signal import iirnotch, filtfilt
 import cupy as cp
 from cupyx.scipy.fft import rfftfreq
 import cupyx.scipy.signal as signal
-from scipy.ndimage import gaussian_filter
-from scipy.optimize import curve_fit
-from scipy.stats import norm
-from scipy.signal import find_peaks
-from scipy.interpolate import interp1d
-from matplotlib import colors, ticker
-import matplotlib.gridspec as gridspec
-from datetime import datetime
 np.set_printoptions(threshold=np.inf)
 
 '''

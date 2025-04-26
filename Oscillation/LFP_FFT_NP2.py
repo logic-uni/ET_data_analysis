@@ -10,7 +10,6 @@ from scipy import signal
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns 
 from scipy.signal import spectrogram
 from matplotlib import cm
 from scipy.signal import iirnotch, filtfilt
@@ -21,27 +20,28 @@ from scipy.ndimage import gaussian_filter
 from scipy.optimize import curve_fit
 from scipy.stats import norm
 from scipy.signal import find_peaks
+from scipy.interpolate import interp1d
 np.set_printoptions(threshold=np.inf)
 
 # For test data
 # ------- NEED CHANGE -------
-mice_path = '/control/Mice_1411_3/20250109_control_Mice_1411_3_VN_freely_moving'
+mice_path = '/headtremor/Mice_1410_1/20250313_tremor_Mice_1410_1_VN_freely_moving'
 region_name = 'VN'
-freq_low, freq_high = 5, 30
+freq_low, freq_high = 1, 30
 # ------- NO NEED CHANGE -------
 fs = 30000  # 30 kHz for NP2
-data_path = '/data1/zhangyuhao/xinchao_data/NP2/test' + mice_path
+data_path = '/data2/zhangyuhao/xinchao_data/NP2/test' + mice_path
 marker = pd.read_csv(data_path + "/Marker/static_motion_segement.csv")
 print(marker)
 LFP = np.load(data_path + "/LFP_npy/export.npy")
-save_path = "/home/zhangyuhao/Desktop/Result/ET/LFP_FFT/NP2/test/" + mice_path
+save_path = "/home/zhangyuhao/Desktop/Result/ET/LFP_FFT/NP2/test" + mice_path
 
 '''
 # For 3 demo data
 # ------- NEED CHANGE -------
-mice_name = '20250310_VN_tremor'  # 20250310_VN_control 20250310_VN_harmaline  20250310_VN_tremor
+mice_name = '20250310_VN_control'  # 20250310_VN_control 20250310_VN_harmaline  20250310_VN_tremor
 region_name = 'VN'
-freq_low, freq_high = 5, 30
+freq_low, freq_high = 1, 30
 # ------- NO NEED CHANGE -------
 fs = 30000  # 30 kHz for NP2
 marker = pd.read_csv(f"/data1/zhangyuhao/xinchao_data/NP2/{mice_name}/Marker/static_motion_segement.csv")
@@ -152,7 +152,7 @@ def analyze_all_bands(data, state, trial):
             title_suffix="\n(After Enhanced Notch Filtering)"
         )
 
-def fq_spec_aver_dura(data, state, trial, title_suffix=""):
+def fq_spec_cupy(data, state, trial, title_suffix=""):
     n_channels, n_samples = data.shape
     
     # 修改2：将数据转移到GPU（假设原始数据在CPU）
@@ -316,7 +316,18 @@ def stft_spectrum_cupy(data, state, title_suffix="", fs=30000):
         plt.savefig(f"{save_path}/{region_name}_{state}_ch{ch_idx+1}.png")
         plt.close()
 
-def plot_avg_spectrum(avg_spectra, freqs, state, title_suffix=""):
+def plot_avg_trial_ch_spectrum(avg_spectra, freqs, state, title_suffix=""):
+    plt.plot(freqs, avg_spectra)
+    plt.xlabel('Frequency (Hz)', fontsize=12)
+    plt.ylabel('Amplitude', fontsize=12)
+    plt.xlim(freq_low, freq_high)
+    plt.ylim(0, np.max(avg_spectra)*1.1)
+    plt.title(f'Average Spectrum ({freq_low}-{freq_high}Hz){title_suffix} - {state}', fontsize=14, pad=20)
+    plt.tight_layout()
+    plt.savefig(f"{save_path}/{region_name}_avg_{state}.png")
+    plt.clf()
+
+def plot_avg_trial_spectrum(avg_spectra, freqs, state, title_suffix=""):
     """绘制平均后的频谱图"""
     n_channels, _ = avg_spectra.shape
     
@@ -347,20 +358,135 @@ def plot_avg_spectrum(avg_spectra, freqs, state, title_suffix=""):
     plt.legend(loc='upper right', fontsize=8, ncol=3)
     
     plt.tight_layout()
-    plt.savefig(f"{save_path}/spectrum/{region_name}_avg_{state}.png")
+    plt.savefig(f"{save_path}/{region_name}_avg_chs_{state}.png")
+    plt.clf()
+
+def compute_spectrum(data):
+    """返回原始频谱和完整频率轴"""
+    n_channels, n_samples = data.shape
+    data_gpu = cp.asarray(data)
+    window = cp.hanning(n_samples)
+    window_correction = cp.sum(window)
+    
+    # 计算完整频率轴
+    freqs = cp.fft.rfftfreq(n_samples, 1/fs).get()  # 转换为CPU数组
+    spectra = []
+    for i in range(n_channels):
+        signal_gpu = data_gpu[i] * window
+        fft_result = cp.fft.rfft(signal_gpu)
+        spectrum = (cp.abs(fft_result) * 2 / window_correction).get()
+        spectra.append(spectrum)
+    return np.array(spectra), freqs
+
+
+def fq_spectrum(data, state, trial, title_suffix=""):
+    n_channels, n_samples = data.shape
+    
+    # 汉宁窗
+    window = np.hanning(n_samples)
+    window_correction = np.sum(window)  # 窗能量补偿系数
+    
+    # 计算正频率
+    freqs = np.fft.rfftfreq(n_samples, 1/fs)
+    freq_mask = (freqs >= freq_low) & (freqs <= freq_high)
+    freqs = freqs[freq_mask]
+    
+    # 逐通道处理
+    all_spectra = []
+    for i in range(n_channels):
+        # 加窗FFT
+        fft_result = np.fft.rfft(data[i] * window)
+        # 幅值补偿
+        spectrum = np.abs(fft_result[freq_mask]) * 2 / window_correction
+        all_spectra.append(spectrum)
+        
+        # 绘图设置（保持原可视化参数）
+        linewidth = 1.5 if i in [0, n_channels//2, n_channels-1] else 0.8
+        plt.plot(freqs, spectrum, 
+                 color=cm.viridis(i/n_channels),
+                 alpha=0.7,
+                 linewidth=linewidth,
+                 label=f'Ch{i+1}' if i % 10 == 0 else "")
+        
+    # 设置图形属性
+    plt.xlabel('Frequency (Hz)', fontsize=12)
+    plt.ylabel('Amplitude', fontsize=12)
+    plt.xlim(freq_low, freq_high)
+    plt.ylim(0, np.max(all_spectra)*1.1)
+    plt.grid(True, linestyle='--', alpha=0.4)
+
+    ax = plt.gca()  # 获取当前坐标轴
+    sm = plt.cm.ScalarMappable(cmap=cm.viridis, norm=plt.Normalize(vmin=1, vmax=n_channels))
+    sm.set_array([])
+    cbar = plt.colorbar(sm, ax=ax, pad=0.02)  # 明确指定 ax
+    cbar.set_label('Channel Number', rotation=270, labelpad=15)
+    
+    # 设置标题和图例
+    title = f'Multi-channel Spectrum ({freq_low}-{freq_high}Hz){title_suffix}'
+    plt.title(title, fontsize=14, pad=20)
+    plt.legend(loc='upper right', fontsize=8, ncol=3)
+    
+    plt.tight_layout()
+    plt.savefig(save_path+f"/spectrum/{region_name}_{state}_trial{trial}.png")
     plt.clf()
 
 def main():
     plt.figure(figsize=(14, 8))
-    for i in range(0,len(marker['run_or_stop'])):
-        start = int(marker['time_interval_left_end'].iloc[i]*fs)   #乘以采样率，转换为采样点
-        end = int(marker['time_interval_right_end'].iloc[i]*fs)
-        state = marker['run_or_stop'].iloc[i]
-        if state == 0: state_name = 'stop'
-        else: state_name = 'run'
-        trail_LFP = LFP[:, start:end]
-        fq_spec_aver_dura(trail_LFP, state_name, i)
-        #fq_heatmap_cupy(trail_LFP, state_name, i)
-        #stft_spectrum_cupy(trail_LFP, '800-980')
+    # 配置公共频率轴（可根据需要调整分辨率）
+    common_freqs = np.linspace(freq_low, freq_high, num=500)  # 500个均匀分布频率点
     
+    # 按状态存储插值后的频谱
+    run_spectra = []
+    stop_spectra = []
+
+    for i in range(len(marker['run_or_stop'])):
+        print(f"Processing trial {i}...")
+        # 数据获取
+        start = int(marker['time_interval_left_end'].iloc[i] * fs)
+        end = int(marker['time_interval_right_end'].iloc[i] * fs)
+        state = marker['run_or_stop'].iloc[i]
+        state_name = 'run' if state == 1 else 'stop'
+        trail_LFP = LFP[:, start:end]
+        #if trail_LFP.shape[1] < 20 * fs:
+            #print("too short, ignore")
+            #continue
+        #fq_spectrum(trail_LFP, state_name,i)
+        
+        spectra, freqs = compute_spectrum(trail_LFP)
+        
+        # 频率筛选
+        freq_mask = (freqs >= freq_low) & (freqs <= freq_high)
+        spectra = spectra[:, freq_mask]
+        freqs = freqs[freq_mask]
+
+        # 频谱插值
+        n_channels = spectra.shape[0]
+        interp_spectra = np.zeros((n_channels, len(common_freqs)))
+        for ch in range(n_channels):
+            # 线性插值（超出范围填充0）
+            interpolator = interp1d(
+                freqs, spectra[ch], 
+                kind='linear', 
+                bounds_error=False, 
+                fill_value=0
+            )
+            interp_spectra[ch] = interpolator(common_freqs)
+        ## 这两句根据需要加
+        #print("Average all channels...")
+        #avg_interp_spectra = np.mean(interp_spectra, axis=0)
+        # 存储结果
+        if state_name == 'run':
+            run_spectra.append(interp_spectra)
+        else:
+            stop_spectra.append(interp_spectra)
+    print(f"Average all trials...")
+    # 计算并绘制平均频谱
+    def process_avg(data, state):
+        if not data: return
+        avg = np.mean(data, axis=0)
+        plot_avg_trial_spectrum(avg, common_freqs, state)
+    
+    process_avg(run_spectra, 'run')
+    process_avg(stop_spectra, 'stop')
+
 main()

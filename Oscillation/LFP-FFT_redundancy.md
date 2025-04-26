@@ -202,58 +202,6 @@ def fft_channels_previous(signals):
     filtered_fft_values = [fft[filtered_indices] for fft in positive_fft_values]
     return filtered_freqs,filtered_fft_values
 
-
-def fq_spectrum(data, state, trial, title_suffix=""):
-    n_channels, n_samples = data.shape
-    
-    # 汉宁窗
-    window = np.hanning(n_samples)
-    window_correction = np.sum(window)  # 窗能量补偿系数
-    
-    # 计算正频率
-    freqs = np.fft.rfftfreq(n_samples, 1/fs)
-    freq_mask = (freqs >= freq_low) & (freqs <= freq_high)
-    freqs = freqs[freq_mask]
-    
-    # 逐通道处理
-    all_spectra = []
-    for i in range(n_channels):
-        # 加窗FFT
-        fft_result = np.fft.rfft(data[i] * window)
-        # 幅值补偿
-        spectrum = np.abs(fft_result[freq_mask]) * 2 / window_correction
-        all_spectra.append(spectrum)
-        
-        # 绘图设置（保持原可视化参数）
-        linewidth = 1.5 if i in [0, n_channels//2, n_channels-1] else 0.8
-        plt.plot(freqs, spectrum, 
-                 color=cm.viridis(i/n_channels),
-                 alpha=0.7,
-                 linewidth=linewidth,
-                 label=f'Ch{i+1}' if i % 10 == 0 else "")
-        
-    # 设置图形属性
-    plt.xlabel('Frequency (Hz)', fontsize=12)
-    plt.ylabel('Amplitude', fontsize=12)
-    plt.xlim(freq_low, freq_high)
-    plt.ylim(0, np.max(all_spectra)*1.1)
-    plt.grid(True, linestyle='--', alpha=0.4)
-
-    ax = plt.gca()  # 获取当前坐标轴
-    sm = plt.cm.ScalarMappable(cmap=cm.viridis, norm=plt.Normalize(vmin=1, vmax=n_channels))
-    sm.set_array([])
-    cbar = plt.colorbar(sm, ax=ax, pad=0.02)  # 明确指定 ax
-    cbar.set_label('Channel Number', rotation=270, labelpad=15)
-    
-    # 设置标题和图例
-    title = f'Multi-channel Spectrum ({freq_low}-{freq_high}Hz){title_suffix}'
-    plt.title(title, fontsize=14, pad=20)
-    plt.legend(loc='upper right', fontsize=8, ncol=3)
-    
-    plt.tight_layout()
-    plt.savefig(save_path+f"/spectrum/{region_name}_{state}_trial{trial}.png")
-    plt.clf()
-
 def fq_heatmap(data, state, trial, title_suffix=""):
     n_channels, n_samples = data.shape
 

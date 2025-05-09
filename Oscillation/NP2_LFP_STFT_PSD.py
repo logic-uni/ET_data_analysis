@@ -15,21 +15,21 @@ from scipy.signal import iirnotch, filtfilt
 import cupy as cp
 from cupyx.scipy.fft import rfftfreq
 import cupyx.scipy.signal as signal
+from matplotlib.colors import Normalize
+
 np.set_printoptions(threshold=np.inf)
 
-'''
+
 # For test data
-file = "20250312_control_Mice_1423_15_VN_freely_moving"
-mice = "Mice_1411_1"
-save_path = f"/home/zhangyuhao/Desktop/Result/ET/Motion_FFT/test/control/{mice}/{file}"
-path = f"/data1/zhangyuhao/xinchao_data/NP2/test/control/{mice}/{file}/Marker"
 region_name = 'VN'
-freq_low, freq_high = 1, 30
-fs = 10593.2
-marker = pd.read_csv(path + "/static_motion_segement.csv")
+fs = 30000  # 30 kHz for NP2
+mice_path = '/headtremor/Mice_1410_1/20250309_tremor_Mice_1410_1_VN_freely_moving'
+data_path = '/data2/zhangyuhao/xinchao_data/NP2/test' + mice_path
+marker = pd.read_csv(data_path + "/Marker/static_motion_segement.csv")
 print(marker)
-motion_data = np.load(path + "/motion_marker.npy")
-motion_data = motion_data[0]
+LFP = np.load(data_path + "/LFP_npy/export.npy")
+save_path = "/home/zhangyuhao/Desktop/Result/ET/LFP_FFT/NP2/test" + mice_path
+
 '''
 # For 3 demo data
 # ------- NEED CHANGE -------
@@ -41,10 +41,10 @@ print(marker)
 motion_data = np.load(f"/data1/zhangyuhao/xinchao_data/NP2/{mice_name}/Marker/motion_marker.npy")
 motion_data = motion_data[0]
 save_path = f"/home/zhangyuhao/Desktop/Result/ET/Motion_FFT/{mice_name}/"  
-
+'''
 # ------- FUNCTIONS -------
 #注意以下使用的函数 np.fft.fftfreq 中，1/fs表示相邻样本之间的时间间隔,因此fs必须是实际数据真实的采样率
-def stft_spectrum_cupy(data, state, start, end, title_suffix="", fs=10593.2):
+def stft_spectrum_cupy(data, ch, start, end, title_suffix="", fs=30000):
     """聚焦10Hz附近的时频功率谱分析 (GPU加速)"""
     # --- 输入校验 ---
     data = cp.atleast_2d(data)
@@ -87,7 +87,8 @@ def stft_spectrum_cupy(data, state, start, end, title_suffix="", fs=10593.2):
 
     # --- 可视化增强 ---
     fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, figsize=(14, 8))
-    
+    print(np.min(cp.asnumpy(psd_db)))
+    print(np.max(cp.asnumpy(psd_db)))
     # 功率谱密度图
     t_absolute = start + cp.asnumpy(t)
     im = ax1.pcolormesh(
@@ -96,36 +97,40 @@ def stft_spectrum_cupy(data, state, start, end, title_suffix="", fs=10593.2):
         cp.asnumpy(psd_db),
         shading="gouraud", 
         cmap="inferno",
-        vmin=-60,   # 亮了就调大，暗了就调小  freely moving: vmin = -72, vmax = -52, head-fixed: vmin = -60, vmax = -45
-        vmax=-45,
+        vmin=-105,
+        vmax=-80,
         rasterized=True
     )
+    #vmin=-72,   # 亮了就调大，暗了就调小  freely moving: vmin = -72, vmax = -52, head-fixed: vmin = -60, vmax = -45
+    #vmax=-52,
     ax1.set_ylabel("Frequency (Hz)")
-    ax1.set_title(f"PSD - {state} (Δf={1/window_sec:.2f}Hz)")
+    ax1.set_title(f"PSD - channel {ch} (Δf={1/window_sec:.2f}Hz)")
     #fig.colorbar(im, ax=ax1, label='Power (dB/Hz)')
 
     # 原始信号时域图
     time_axis = np.linspace(start, end, n_samples)
     ax2.plot(time_axis, cp.asnumpy(data_gpu[0]), lw=0.5)
     ax2.set(xlim=(start, end), xlabel="Time (s)", ylabel="Amplitude")
-    ax2.set_title(f"Time Domain Signal ({state})")
+    ax2.set_title(f"Time Domain Signal (channel {ch})")
 
     plt.tight_layout()
-    plt.savefig(f"{save_path}/PSD_{region_name}_{state}.png", dpi=150)
+    plt.savefig(f"{save_path}/PSD_{region_name}_ch_{ch}.png", dpi=150)
     plt.close()
 
 def main():
-    start_time = 0
-    end_time = marker["time_interval_right_end"].iloc[-1]
+    start_time = 0 #1330
+    end_time = marker["time_interval_right_end"].iloc[-1] #1368
     start_sample = int(start_time * fs)
     end_sample = int(end_time * fs)
-    trail_motion_data = motion_data[start_sample:end_sample]
-    # 调用函数
-    stft_spectrum_cupy(
-        trail_motion_data,
-        state='whole',
-        start=start_time,
-        end=end_time
-    )
+    for ch in range(LFP.shape[0]):
+        ch_LFP = LFP[0]
+        trail_motion_data = ch_LFP[start_sample:end_sample]
+        # 调用函数
+        stft_spectrum_cupy(
+            trail_motion_data,
+            ch=ch,
+            start=start_time,
+            end=end_time
+        )
 
 main()

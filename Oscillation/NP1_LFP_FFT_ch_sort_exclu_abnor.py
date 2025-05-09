@@ -23,9 +23,9 @@ np.set_printoptions(threshold=np.inf)
 
 # ------- NEED CHANGE -------
 ####这个千万别忘了开或者关LFP截断
-mice_name = '20230113_littermate'
-LFP_file = 'Lobules IV-V.npy'
-region_name = 'Lobules IV-V'
+mice_name = '20230523_Syt2_conditional_tremor_mice1'
+LFP_file = 'Subceruleus nucleus.npy'  #Medial vestibular nucleus.npy
+region_name = 'Subceruleus nucleus'
 freq_low, freq_high = 8, 30
 
 # ------- NO NEED CHANGE -------
@@ -431,9 +431,10 @@ def fq_heatmap(data, state, trial, sample_rate=2500, title_suffix=""):
 
     plt.title(f'Multi-channel Spectrum Heatmap ({freq_low}-{freq_high}Hz){title_suffix}', fontsize=14, pad=20)
     X, Y = np.meshgrid(freqs, np.arange(n_channels))
+    print(all_spectra.min(),all_spectra.max())
     pc = plt.pcolormesh(X, Y, all_spectra,
                        shading='auto',
-                       cmap='plasma')
+                       cmap='plasma',vmin = 90, vmax = 100000)
     # 保证通道0在底部
     plt.gca().invert_yaxis()
     
@@ -449,62 +450,6 @@ def fq_heatmap(data, state, trial, sample_rate=2500, title_suffix=""):
     plt.tight_layout()
     plt.savefig(save_path+f"/heatmap/{region_name}_{state}_trial{trial}_heatmap.png")
     plt.clf()
-
-def prominan(freqs,spectrum):
-    # 1) Define exponential background model: A·exp(−B·x) + C
-    def exp_background(x, A, B, C):
-        return A * np.exp(-B * x) + C
-
-    # 2) Choose initial guesses
-    A0 = spectrum.max() - spectrum.min()
-    B0 = 1e-3  # assume slow decay
-    C0 = np.percentile(spectrum, 5)  # a little above the absolute min to avoid log issues
-
-    p0 = [A0, B0, C0]
-
-    # 3) Set bounds: A≥0, B≥0, C≥0
-    lower = [0, 0, 0]
-    upper = [np.inf, np.inf, np.inf]
-
-    # 4) Fit with more function evaluations
-    try:
-        popt, pcov = curve_fit(
-            exp_background, freqs, spectrum,
-            p0=p0, bounds=(lower, upper),
-            maxfev=5000
-        )
-        background = exp_background(freqs, *popt)
-    except RuntimeError:
-        # Fallback: use flat background at the 5th percentile
-        popt = [np.nan, np.nan, C0]
-        background = np.full_like(spectrum, fill_value=C0)
-        print("Warning: exponential fit failed – using constant background.")
-
-    # 5) Subtract background
-    spec_corrected = spectrum - background
-
-    # 6) Smooth with Gaussian‐weighted moving average
-    window_size = 31
-    x_gauss = np.linspace(-3, 3, window_size)
-    gauss_kernel = norm.pdf(x_gauss)
-    gauss_kernel /= gauss_kernel.sum()
-    spec_smooth = np.convolve(spec_corrected, gauss_kernel, mode='same')
-
-    # 7) Peak detection with 1%‐of‐mean prominence
-    prom_thresh = 0.01 * np.mean(spec_smooth)
-    peaks, props = find_peaks(spec_smooth, prominence=prom_thresh)
-
-    # 8) Collect peak info
-    peak_freqs       = freqs[peaks]
-    peak_heights     = spec_smooth[peaks]
-    peak_prominences = props['prominences']
-
-    prominence_array = np.zeros_like(freqs)
-    for freq, prom in zip(peak_freqs, peak_prominences):
-        idx = np.argmin(np.abs(freqs - freq))  # Find the closest index in freqs
-        prominence_array[idx] = prom
-
-    return prominence_array
 
 def fq_each_trial_spectrum(data, state, trial, sample_rate=2500, title_suffix=""):
     n_channels, n_samples = data.shape
@@ -544,7 +489,9 @@ def main():
         else: state_name = 'run'
         #读取each trial的LFP
         trail_LFP = LFP[:, start:end]
-        fq_each_trial_spectrum(trail_LFP, state_name, i)
+        trail_LFP = np.delete(trail_LFP, np.s_[16], axis=0)
+        fq_heatmap(trail_LFP, state_name, i)
+        #fq_each_trial_spectrum(trail_LFP, state_name, i)
 
         #analyze_all_bands()
         #fq_spectrum(trail_LFP, state_name, i)

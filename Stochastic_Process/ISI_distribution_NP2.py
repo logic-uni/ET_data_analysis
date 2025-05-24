@@ -14,18 +14,19 @@ np.set_printoptions(threshold=np.inf)
 np.seterr(divide='ignore',invalid='ignore')
 
 # ------- NEED CHANGE -------
-data_path = '/data2/zhangyuhao/xinchao_data/Givenme/1410-1-tremor-Day3-VN-FM_g0'
-save_path = "/home/zhangyuhao/Desktop/Result/ET/LFP_FFT/NP2/givenme/1410-1-tremor-Day3-VN-FM_g0"
+data_path = '/data2/zhangyuhao/xinchao_data/test/headtremor/Mice_1410_1/20250309_tremor_Mice_1410_1_VN_freely_moving'
+save_path = "/home/zhangyuhao/Desktop/Result/ET/ISI/NP2/test/tremor/Mice_1410_1/20250309_tremor_Mice_1410_1_VN_freely_moving"
 # ------- NO NEED CHANGE -------
 type2_threshold = 0.2
-fr_filter = 8                # 1  firing rate > 1
+fr_filter = 1                # 1  firing rate > 1
 cutoff_distr = 80           # 250ms/None  cutoff_distr=0.25代表截断ISI分布大于0.25s的
 histo_bin_num = 100          # 统计图bin的个数
 ### electrophysiology
 fs = 30000 #spikeGLX neuropixel sample rate
-identities = np.load(data_path + '/Sorted/spike_clusters.npy') # time series: unit id of each spike
-times = np.load(data_path + '/spike_times.npy')  # time series: spike time of each spike
-neurons = pd.read_csv(data_path + '/cluster_group.tsv', sep='\t')  
+identities = np.load(data_path + '/Sorted/kilosort4/spike_clusters.npy') # time series: unit id of each spike
+times = np.load(data_path + '/Sorted/kilosort4/spike_times.npy')  # time series: spike time of each spike
+#neurons = pd.read_csv(data_path + "/filtered_quality_metrics.csv")  # QC neurons
+neurons = pd.read_csv(data_path + '/Sorted/kilosort4/cluster_group.tsv', sep='\t')  
 print(neurons)
 elec_dura = times[-1] / fs
 print(elec_dura)

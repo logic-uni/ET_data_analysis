@@ -17,34 +17,18 @@ from cupyx.scipy.fft import rfftfreq
 import cupyx.scipy.signal as signal
 np.set_printoptions(threshold=np.inf)
 
-'''
-# For test data
-file = "20250312_control_Mice_1423_15_VN_freely_moving"
-mice = "Mice_1411_1"
-save_path = f"/home/zhangyuhao/Desktop/Result/ET/Motion_FFT/test/control/{mice}/{file}"
-path = f"/data1/zhangyuhao/xinchao_data/NP2/test/control/{mice}/{file}/Marker"
-region_name = 'VN'
-freq_low, freq_high = 1, 30
+data_path = "/data1/zhangyuhao/xinchao_data/NP2/test/control/Mice_1411_3/20250110_control_Mice_1411_3_t2d_shank4_head_fixation"
+save_path = "/home/zhangyuhao/Desktop/Result/ET/Motion_FFT/NP2/test/control/Mice_1411_3/20250110_control_Mice_1411_3_t2d_shank4_head_fixation"
+freq_low, freq_high = 0.5, 30
 fs = 10593.2
-marker = pd.read_csv(path + "/static_motion_segement.csv")
-print(marker)
-motion_data = np.load(path + "/motion_marker.npy")
+marker = pd.read_csv(data_path + "/Marker/static_motion_segement.csv")
+motion_data = np.load(data_path + "/Marker/motion_marker.npy")
 motion_data = motion_data[0]
-'''
-# For 3 demo data
-# ------- NEED CHANGE -------
-mice_name = '20250310_VN_harmaline'  # 20250310_VN_control 20250310_VN_harmaline  20250310_VN_tremor
-region_name = 'VN'
-fs = 10593.2
-marker = pd.read_csv(f"/data1/zhangyuhao/xinchao_data/NP2/{mice_name}/Marker/static_motion_segement.csv")
 print(marker)
-motion_data = np.load(f"/data1/zhangyuhao/xinchao_data/NP2/{mice_name}/Marker/motion_marker.npy")
-motion_data = motion_data[0]
-save_path = f"/home/zhangyuhao/Desktop/Result/ET/Motion_FFT/{mice_name}/"  
 
 # ------- FUNCTIONS -------
 #注意以下使用的函数 np.fft.fftfreq 中，1/fs表示相邻样本之间的时间间隔,因此fs必须是实际数据真实的采样率
-def stft_spectrum_cupy(data, state, start, end, title_suffix="", fs=10593.2):
+def stft_cupy(data, state, start, end, title_suffix="", fs=10593.2):
     """聚焦10Hz附近的时频功率谱分析 (GPU加速)"""
     # --- 输入校验 ---
     data = cp.atleast_2d(data)
@@ -111,21 +95,48 @@ def stft_spectrum_cupy(data, state, start, end, title_suffix="", fs=10593.2):
     ax2.set_title(f"Time Domain Signal ({state})")
 
     plt.tight_layout()
-    plt.savefig(f"{save_path}/PSD_{region_name}_{state}.png", dpi=150)
+    plt.savefig(f"{save_path}/PSD_{state}.png", dpi=150)
+    plt.close()
+
+def FFT_cupy(data, time_interval):
+    n_samples = data.shape[0]
+    # 数据转移到GPU
+    data_gpu = cp.asarray(data)
+    # 使用cupy计算频率
+    freqs = rfftfreq(n_samples, 1/fs)
+    freq_mask = (freqs >= freq_low) & (freqs <= freq_high)
+    freqs = freqs[freq_mask].get()  # 转回CPU
+    # cupy生成窗
+    window = cp.hanning(n_samples)
+    window_power = cp.sum(window**2)  # 计算窗函数能量
+    # GPU处理
+    signal_gpu = data_gpu * window
+    fft_result = cp.fft.rfft(signal_gpu)
+    # PSD calculate |FFT|^2 / (fs * window_power)
+    psd_gpu = cp.abs(fft_result[freq_mask])**2 / (fs * window_power)
+    psd = psd_gpu.get()  # 转回CPU
+    plt.figure(figsize=(10, 6))
+    plt.plot(freqs, psd)
+    plt.xlabel('Frequency (Hz)')
+    plt.ylabel('PSD')
+    plt.title(f'Motion_{time_interval}s')
+    plt.tight_layout()
+    plt.savefig(f"{save_path}/PSD_{time_interval}.png", dpi=150)
     plt.close()
 
 def main():
-    start_time = 0
-    end_time = marker["time_interval_right_end"].iloc[-1]
+    start_time = 0  #245
+    end_time = marker["time_interval_right_end"].iloc[-1] #254 
     start_sample = int(start_time * fs)
     end_sample = int(end_time * fs)
-    trail_motion_data = motion_data[start_sample:end_sample]
-    # 调用函数
-    stft_spectrum_cupy(
-        trail_motion_data,
+    trunc_motion_data = motion_data[start_sample:end_sample]
+    FFT_cupy(trunc_motion_data, f'{start_time}-{end_time}')
+    '''
+    stft_cupy(
+        trunc_motion_data,
         state='whole',
         start=start_time,
         end=end_time
     )
-
+    '''
 main()

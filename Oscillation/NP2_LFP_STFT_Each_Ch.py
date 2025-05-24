@@ -20,7 +20,7 @@ np.set_printoptions(threshold=np.inf)
 
 # ------- NEED CHANGE -------
 data_path = '/data2/zhangyuhao/xinchao_data/Givenme/1423_15_control-Day1-4CVC-FM_g0'
-save_path = "/home/zhangyuhao/Desktop/Result/ET/LFP_FFT/NP2/givenme/1423_15_control-Day1-4CVC-FM_g0"
+save_path = "/home/zhangyuhao/Desktop/Result/ET/LFP_STFT_0.5-100Hz_static/NP2/givenme/1423_15_control-Day1-4CVC-FM_g0"
 region_name = 'T2D'
 freq_low, freq_high = 0.5, 100
 # ------- NO NEED CHANGE -------
@@ -33,6 +33,21 @@ print("Test if LFP duration same as marker duration...")
 print(f"LFP duration: {LFP.shape[1]/fs} s")
 print(f"marker duration: {len(motion_data)/marker_fs} s")
 print(f"LFP shape: {LFP.shape}")
+
+def Grouped_to_get_real_LFP():
+    """
+    将LFP每32个通道加在一起，返回合并后的LFP
+    """
+    print("Grouping to get real LFP...")
+    group_size = 32
+    n_channels, n_samples = LFP.shape
+    n_groups = n_channels // group_size
+    grouped_LFP = []
+    for i in range(n_groups):
+        group = LFP[i*group_size:(i+1)*group_size, :]
+        grouped_LFP.append(np.sum(group, axis=0))
+    
+    return np.array(grouped_LFP)
 
 #注意以下使用的函数 np.fft.fftfreq 中，1/fs表示相邻样本之间的时间间隔,因此fs必须是实际数据真实的采样率
 def stft_spectrum_cupy(data, ch, start_time, end_time, title_suffix=""):
@@ -89,8 +104,8 @@ def stft_spectrum_cupy(data, ch, start_time, end_time, title_suffix=""):
         cp.asnumpy(psd_db),
         shading="gouraud", 
         cmap="Spectral_r",
-        vmax=0.7,
-        vmin=-0.7,                                      
+        vmax=0.3,
+        vmin=-0.3,                                      
         rasterized=True
     )
     ax1.set_ylabel("Frequency (Hz)")
@@ -106,13 +121,43 @@ def stft_spectrum_cupy(data, ch, start_time, end_time, title_suffix=""):
     plt.close()
 
 def main():
+    processed_LFP = LFP
+    #processed_LFP = Grouped_to_get_real_LFP()
+    
+    # for specific interval
+    start_time = 245
+    end_time = 254
+    print(f"Processing {start_time}s ~ {end_time}s...")
+    start_LFP_sample = int(start_time * fs)
+    end_LFP_sample = int(end_time * fs)
+    LFP_trunc = processed_LFP[:, start_LFP_sample:end_LFP_sample]
+    chs = [320,171,249]
+    for ch in chs:
+        ch_LFP = LFP_trunc[ch]
+        stft_spectrum_cupy(
+            ch_LFP,
+            ch=ch,
+            start_time=start_time,
+            end_time=end_time
+        )
+    '''
+    for ch in range(LFP_trunc.shape[0]):
+        ch_LFP = LFP_trunc[ch]
+        stft_spectrum_cupy(
+            ch_LFP,
+            ch=ch,
+            start_time=start_time,
+            end_time=end_time
+        )
+    
+    # for whole time truncated by 300s 
     for i in range(int(len(motion_data)/marker_fs) // 300):
         start_time = i * 300
         end_time = (i + 1) * 300
         print(f"Processing {start_time}s ~ {end_time}s...")
         start_LFP_sample = int(start_time * fs)
         end_LFP_sample = int(end_time * fs)
-        LFP_trunc = LFP[:, start_LFP_sample:end_LFP_sample]
+        LFP_trunc = processed_LFP[:, start_LFP_sample:end_LFP_sample]
         for ch in range(LFP_trunc.shape[0]):
             ch_LFP = LFP_trunc[ch]
             stft_spectrum_cupy(
@@ -121,6 +166,7 @@ def main():
                 start_time=start_time,
                 end_time=end_time
             )
+    '''
 
 main()
 

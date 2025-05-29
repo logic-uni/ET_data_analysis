@@ -14,32 +14,34 @@ from scipy.signal import spectrogram
 from scipy.signal import iirnotch, filtfilt
 import cupy as cp
 from cupyx.scipy.fft import rfftfreq
+from scipy.ndimage import gaussian_filter
 import cupyx.scipy.signal as signal
 np.set_printoptions(threshold=np.inf)
 
-data_path = "/data1/zhangyuhao/xinchao_data/NP2/test/control/Mice_1411_3/20250110_control_Mice_1411_3_t2d_shank4_head_fixation"
-save_path = "/home/zhangyuhao/Desktop/Result/ET/Motion_FFT/NP2/test/control/Mice_1411_3/20250110_control_Mice_1411_3_t2d_shank4_head_fixation"
-freq_low, freq_high = 0.5, 30
+data_path = "/data1/zhangyuhao/xinchao_data/NP2/test/control/Mice_1411_3/20250109_control_Mice_1411_3_VN_head_fixation"
+save_path = "/home/zhangyuhao/Desktop/Result/ET/Motion_FFT/NP2/test/control/Mice_1411_3/20250109_control_Mice_1411_3_VN_head_fixation"
 fs = 10593.2
 marker = pd.read_csv(data_path + "/Marker/static_motion_segement.csv")
 motion_data = np.load(data_path + "/Marker/motion_marker.npy")
 motion_data = motion_data[0]
 print(marker)
+freq_low, freq_high = 0.5, 30
+start_time = 438
+end_time = 439.6 #marker["time_interval_right_end"].iloc[-1]
 
 # ------- FUNCTIONS -------
 #注意以下使用的函数 np.fft.fftfreq 中，1/fs表示相邻样本之间的时间间隔,因此fs必须是实际数据真实的采样率
-def stft_cupy(data, state, start, end, title_suffix="", fs=10593.2):
-    """聚焦10Hz附近的时频功率谱分析 (GPU加速)"""
+def stft_cupy(data, state, start, end):
     # --- 输入校验 ---
     data = cp.atleast_2d(data)
     if data.shape[0] != 1:
         raise ValueError("输入必须为单通道数据")
 
     # --- 参数优化 ---
-    freq_range = (1, 35)              # 聚焦频带范围
-    window_sec = 4.0                   # 时间窗口延长以提高频率分辨率
+    freq_range = (freq_low, freq_high)              # 聚焦频带范围
+    window_sec = 25                     # 时间窗口延长以提高频率分辨率
     nperseg = int(fs * window_sec)     # 21186 samples @ fs=10593.2Hz
-    noverlap = int(nperseg * 0.75)     # 75%重叠平衡分辨率与计算量
+    noverlap = int(nperseg * 0.5)     # 75%重叠平衡分辨率与计算量
     nfft = nperseg * 2                 # 补零提高频率插值精度
 
     # --- 数据校验 ---
@@ -58,16 +60,28 @@ def stft_cupy(data, state, start, end, title_suffix="", fs=10593.2):
         nfft=nfft,
         boundary="even"
     )
-
+    
     # --- PSD计算 ---
+    '''
     S1 = cp.sum(window**2)
     psd = cp.abs(Zxx)**2 / (S1 * fs)
     psd_db = 10 * cp.log10(psd + 1e-12)
-
-    # --- 频率聚焦 ---
+    '''
+    # --- PSD计算 (normalize) ---
+    S1 = cp.sum(window**2)
+    psd = cp.abs(Zxx)**2 / (S1 * fs)
+    psd_cpu = cp.asnumpy(psd)
+    psd_db_cpu = 10 * np.log10(psd_cpu + 1e-12)
+    psd_db_cpu = np.array([(x_i - np.nanmean(x_i)) / np.std(x_i) for x_i in psd_db_cpu])
+    #psd_db_cpu = gaussian_filter(psd_db_cpu, sigma=1.5)
+    psd_db = cp.asarray(psd_db_cpu)  # 转回GPU
+    
+    # --- 频率筛选 ---
     freq_mask = (f >= freq_range[0]) & (f <= freq_range[1])
     f_filtered = f[freq_mask]
     psd_db = psd_db[freq_mask, :]
+    print("psd_db max:", cp.max(psd_db).item())
+    print("psd_db min:", cp.min(psd_db).item())
 
     # --- 可视化增强 ---
     fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, figsize=(14, 8))
@@ -79,14 +93,13 @@ def stft_cupy(data, state, start, end, title_suffix="", fs=10593.2):
         cp.asnumpy(f_filtered),
         cp.asnumpy(psd_db),
         shading="gouraud", 
-        cmap="inferno",
-        vmin=-60,   # 亮了就调大，暗了就调小  freely moving: vmin = -72, vmax = -52, head-fixed: vmin = -60, vmax = -45
-        vmax=-45,
+        cmap="Spectral_r",
+        vmax=cp.max(psd_db).item(),  #根据psd max调整
+        vmin=cp.min(psd_db).item(),
         rasterized=True
     )
     ax1.set_ylabel("Frequency (Hz)")
     ax1.set_title(f"PSD - {state} (Δf={1/window_sec:.2f}Hz)")
-    #fig.colorbar(im, ax=ax1, label='Power (dB/Hz)')
 
     # 原始信号时域图
     time_axis = np.linspace(start, end, n_samples)
@@ -96,6 +109,18 @@ def stft_cupy(data, state, start, end, title_suffix="", fs=10593.2):
 
     plt.tight_layout()
     plt.savefig(f"{save_path}/PSD_{state}.png", dpi=150)
+    plt.close()
+
+def plot_motion_raw_data(data, state, start, end):
+    n_samples = data.shape[0]
+    time_axis = np.linspace(start, end, n_samples)
+    plt.figure(figsize=(12, 4))
+    plt.plot(time_axis, data, lw=0.7)
+    plt.xlabel("Time (s)")
+    plt.ylabel("Amplitude")
+    plt.title(f"Raw Motion Data ({state})")
+    plt.tight_layout()
+    plt.savefig(f"{save_path}/Raw_{state}.png", dpi=150)
     plt.close()
 
 def FFT_cupy(data, time_interval):
@@ -125,11 +150,10 @@ def FFT_cupy(data, time_interval):
     plt.close()
 
 def main():
-    start_time = 0  #245
-    end_time = marker["time_interval_right_end"].iloc[-1] #254 
     start_sample = int(start_time * fs)
     end_sample = int(end_time * fs)
     trunc_motion_data = motion_data[start_sample:end_sample]
+    plot_motion_raw_data(trunc_motion_data,f'{start_time}-{end_time}', start_time, end_time)
     FFT_cupy(trunc_motion_data, f'{start_time}-{end_time}')
     '''
     stft_cupy(

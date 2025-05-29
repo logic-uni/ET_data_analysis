@@ -1,7 +1,7 @@
 """
 # coding: utf-8
 @author: Yuhao Zhang
-last updated: 05/22/2025
+last updated: 05/28/2025
 data from: Xinchao Chen
 Befor Running, Please check two things
 1. FFT of LFP signal must add Window, without that the FFT result will be fault
@@ -25,8 +25,8 @@ import scipy.io
 np.set_printoptions(threshold=np.inf)
 
 # ------- NEED CHANGE -------
-data_path = '/data2/zhangyuhao/xinchao_data/Givenme/1670-2-tremor-Day5-bank_1CVC-FM_g0'
-save_path_heatmap = '/home/zhangyuhao/Desktop/Result/ET/LFP_FFT_chs_heatmap/NP2/givenme/1670-2-tremor-Day5-bank_1CVC-FM_g0'
+data_path = '/data1/zhangyuhao/xinchao_data/NP2/demo/20250308_control_Mice_1423-15-VN-head_fixation_demo' 
+save_path_heatmap = '/home/zhangyuhao/Desktop/Result/ET/LFP_FFT_chs_heatmap/NP2/demo/20250308_control_Mice_1423-15-VN-head_fixation_demo'
 save_path_single_ch = '/home/zhangyuhao/Desktop/Result/ET/LFP_FFT_singlech_spectra/NP2/givenme/1670-2-tremor-Day5-bank_4CVC-FM_g0'
 mannual_exclude_ch = None # None
 # ------- NO NEED CHANGE -------
@@ -34,22 +34,27 @@ chanmap_mat = scipy.io.loadmat(data_path + '/Rawdata/ChanMap.mat')  # 加载Chan
 # 从ChanMap.mat中提取ycoords
 ycoords = np.array(chanmap_mat['ycoords']).flatten()
 fs = 30000  # 30 kHz for NP2
-freq_low, freq_high = 0.5, 30
-marker = pd.read_csv(data_path + "/Marker/static_motion_segement.csv")
-print(marker)
 LFP = np.load(data_path + "/LFP/LFP_npy/export.npy")
 if mannual_exclude_ch is not None and len(mannual_exclude_ch) > 0:
     LFP = np.delete(LFP, mannual_exclude_ch, axis=0)
+print(f"LFP shape: {LFP.shape}")
 print("Test if LFP duration same as marker duration...")
 print(f"LFP duration: {LFP.shape[1]/fs}")
+freq_low, freq_high = 0.5, 100
+
+# If compute for specific time interval, use this
+start_time, end_time = 1335.6,1338.3  #marker["time_interval_right_end"].iloc[-1]
+'''
+# If you don't have marker file, you can exclude this
+marker = pd.read_csv(data_path + "/Marker/static_motion_segement.csv")
+print(marker)
 print(f"Marker duration: {marker['time_interval_right_end'].iloc[-1]}")
-print(f"LFP shape: {LFP.shape}")
 
 # If there are excluded channels from spikeinterface export, use this
 exclu_chs = np.load(data_path + "/LFP/excluded_channels.npy")
 print(f"Exclude channel: {exclu_chs}")
 ycoords = np.delete(ycoords, exclu_chs)  # 删除ycoords中exclu_chs序号的元素
-
+'''
 # 根据ycoords从小到大对LFP进行排序（从下到上）
 print("Rearrange LFP channels...")
 rearrange_ch_id = np.argsort(ycoords) # 从小到大排序，即probe从下到上  其实就是重排后的LFP每个通道的原始编号，因为原始LFP是按照0-384顺序编号的
@@ -161,8 +166,8 @@ def plot_raw_heatmap(freqs,n_channels,all_psd,state,time_interval):
     pc = plt.pcolormesh(X, Y, all_psd,
         shading="gouraud", 
         cmap="plasma",
-        vmax=10,
-        vmin=0,
+        vmax=np.max(all_psd).item(),
+        vmin=np.min(all_psd).item(),
         rasterized=True
     )
         #shading='auto',
@@ -173,10 +178,10 @@ def plot_raw_heatmap(freqs,n_channels,all_psd,state,time_interval):
     plt.ylabel('Channel Number not channel id', fontsize=12)
     plt.xlim(freq_low, freq_high)
     plt.yticks(np.arange(0, n_channels, 10), fontsize=8)
-    title = f'Multi-channel Spectrum Heatmap ({freq_low}-{freq_high}Hz) ({time_interval}s)'
+    title = f'Multi-channel Spectrum Heatmap ({freq_low}-{freq_high}Hz) ({time_interval}trial)'
     plt.title(title, fontsize=14, pad=20)
     plt.tight_layout()
-    plt.savefig(save_path_heatmap+f"/{state}_{time_interval}_raw.png")
+    plt.savefig(save_path_heatmap+f"/{state}_{time_interval}_{freq_low}_{freq_high}_raw.png")
     plt.clf()
 
 def plot_normalized_heatmap(freqs,n_channels,all_psd,state,time_interval):
@@ -194,8 +199,8 @@ def plot_normalized_heatmap(freqs,n_channels,all_psd,state,time_interval):
     pc = plt.pcolormesh(X, Y, all_psd,
         shading="gouraud", 
         cmap="Spectral_r",
-        vmax=1.2,
-        vmin=-1.2,                                      
+        vmax=np.max(all_psd).item(),
+        vmin=np.min(all_psd).item(),                                      
         rasterized=True
     )
     cbar = plt.colorbar(pc, pad=0.02)
@@ -204,10 +209,10 @@ def plot_normalized_heatmap(freqs,n_channels,all_psd,state,time_interval):
     plt.ylabel('Channel Number not channel id', fontsize=12)
     plt.xlim(freq_low, freq_high)
     plt.yticks(np.arange(0, n_channels, 10), fontsize=8)
-    title = f'Multi-channel Spectrum Heatmap ({freq_low}-{freq_high}Hz) ({time_interval}s)'
+    title = f'Multi-channel Spectrum Heatmap ({freq_low}-{freq_high}Hz) ({time_interval}trial)'
     plt.title(title, fontsize=14, pad=20)
     plt.tight_layout()
-    plt.savefig(save_path_heatmap+f"/{state}_{time_interval}_normalize.png")
+    plt.savefig(save_path_heatmap+f"/{state}_{time_interval}_{freq_low}_{freq_high}_normalize.png")
     plt.clf()
 
 def plot_each_ch_spectra(freqs,rearrange_ch_ids,all_psd,state,trial):
@@ -245,7 +250,7 @@ def fq_heatmap_cupy(data, state, time_interval):
         all_psd.append(psd_gpu.get())  # 修改14：转回CPU
 
     all_psd = np.array(all_psd)
-    plot_raw_heatmap(freqs,n_channels,all_psd,state,time_interval)
+    #plot_raw_heatmap(freqs,n_channels,all_psd,state,time_interval)
     plot_normalized_heatmap(freqs,n_channels,all_psd,state,time_interval)
     #plot_each_ch_spectra(freqs,n_channels,all_psd,state,trial)
 
@@ -254,8 +259,8 @@ def main():
     #processed_LFP = Grouped_to_get_real_LFP()
     print(f"Processed LFP size:{processed_LFP.shape}")
     plt.figure(figsize=(14, 8))
+    
     ## compute static time interval
-    start_time, end_time = 750,800
     start, end = int(start_time * fs), int(end_time * fs)
     trail_LFP = processed_LFP[:, start:end]
     fq_heatmap_cupy(trail_LFP, 'stop', f'{start_time}-{end_time}') 
@@ -271,6 +276,20 @@ def main():
         if trail_LFP.shape[1] < 20 * fs:
             print("too short, ignore")
             continue
-        fq_heatmap_cupy(trail_LFP, state_name,i) 
+        fq_heatmap_cupy(trail_LFP, state_name,i)
+
+    ## compute by fixed time interval 150 s, for those doesn't have motion marker
+    print((LFP.shape[1]/fs) // 150)
+    for i in range(int((LFP.shape[1]/fs) // 150)):
+        print(f"Processing trial {i}...")
+        start = int(i * 150 * fs)
+        end = int((i+1) * 150 * fs)
+        state_name = 'fixed'
+        trail_LFP = processed_LFP[:, start:end]
+        print(trail_LFP.shape)
+        if trail_LFP.shape[1] < 20 * fs:
+            print("too short, ignore")
+            continue
+        fq_heatmap_cupy(trail_LFP,state_name,i) 
     '''
 main()

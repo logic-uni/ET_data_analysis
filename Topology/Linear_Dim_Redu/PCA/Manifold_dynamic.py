@@ -14,10 +14,8 @@ from matplotlib.animation import FuncAnimation
 from sklearn.metrics import pairwise_distances
 from sklearn.manifold import Isomap
 from sklearn.decomposition import PCA
-from sklearn.linear_model import LinearRegression
 from matplotlib import cm
 from scipy import interpolate
-from scipy.interpolate import interp1d
 from elephant.conversion import BinnedSpikeTrain
 np.set_printoptions(threshold=np.inf)
 
@@ -52,7 +50,6 @@ neuron_num = neurons.count().transpose().values
 def singleneuron_spiketimes(id):
     x = np.where(identities == id)
     y=x[0]
-    #y = np.where(np.isin(identities, id))[0]
     spike_times=np.empty(len(y))
     for i in range(0,len(y)):
         z=y[i]
@@ -71,23 +68,6 @@ def popu_fr_onetrial(neuron_ids,marker_start,marker_end):
         else:
             neurons = np.vstack((neurons, one_neruon))
     return neurons
-
-def reduce_dimension(count,bin_size,region_name,n_components): # 默认: 0.1 感觉改bin_size影响不大，改firing rate的bin size影响较大
-    #smooth data
-    count = pd.DataFrame(count)
-    rate = np.sqrt(count/bin_size)
-    #对数据做均值  默认: window=50  min_periods=1  感觉改这些值影响不大，改firing的bin size影响较大
-    rate = rate.rolling(window=50,win_type='gaussian',center=True,min_periods=1, axis = 0).mean(std=2) 
-    #reduce dimension
-    
-    pca = PCA(n_components)
-    X_pca = pca.fit_transform(rate.values)   #对应的是Explained variance
-    explained_variance_ratio = pca.explained_variance_ratio_   #每个主成分所解释的方差比例
-    explained_variance_sum = np.cumsum(explained_variance_ratio)  #计算累积解释方差比例
-    
-    #X_isomap = Isomap(n_components = 3, n_neighbors = 21).fit_transform(rate.values)  #对应的是Residual variance
-    #X_tsne = TSNE(n_components=3,random_state=21,perplexity=20).fit_transform(rate.values)  #t-SNE没有Explained variance，t-SNE 旨在保留局部结构而不是全局方差
-    return X_pca
 
 def adjust_array(arr):
     if any(x < 0 for x in arr):
@@ -183,6 +163,10 @@ def reduce_dimension(count,bin_size,region_name,stage): # 默认: 0.1 感觉改b
     ## PCA
     pca = PCA(n_components=3)
     X_pca = pca.fit_transform(rate.values)   #对应的是Explained variance
+    #X_isomap = Isomap(n_components = 3, n_neighbors = 21).fit_transform(rate.values)  #对应的是Residual variance
+    #X_tsne = TSNE(n_components=3,random_state=21,perplexity=20).fit_transform(rate.values)  #t-SNE没有Explained variance，t-SNE 旨在保留局部结构而不是全局方差
+    X_isomap = Isomap(n_components = 3, n_neighbors = 21).fit_transform(rate.values)  #对应的是Residual variance
+    #X_tsne = TSNE(n_components=3,random_state=21,perplexity=20).fit_transform(rate.values)  #t-SNE没有Explained variance，t-SNE 旨在保留局部结构而不是全局方差
     explained_variance_ratio = pca.explained_variance_ratio_   #每个主成分所解释的方差比例
     explained_variance_sum = np.cumsum(explained_variance_ratio)  #计算累积解释方差比例
     #画explained_variance图
@@ -196,8 +180,7 @@ def reduce_dimension(count,bin_size,region_name,stage): # 默认: 0.1 感觉改b
     plt.legend()
     #plt.show()
     plt.savefig(save_path+f"/{region_name}_{stage}_PC_explained_var_ratio.png",dpi=600,bbox_inches = 'tight')
-    X_isomap = Isomap(n_components = 3, n_neighbors = 21).fit_transform(rate.values)  #对应的是Residual variance
-    #X_tsne = TSNE(n_components=3,random_state=21,perplexity=20).fit_transform(rate.values)  #t-SNE没有Explained variance，t-SNE 旨在保留局部结构而不是全局方差
+  
     return X_isomap
 
 def reduce_dimension_ISOMAP(count,bin_size,region_name,stage): # 默认: 0.1 感觉改bin_size影响不大，改firing rate的bin size影响较大

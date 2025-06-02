@@ -45,7 +45,6 @@ neuron_num = neurons.count().transpose().values
 def singleneuron_spiketimes(id):
     x = np.where(identities == id)
     y=x[0]
-    #y = np.where(np.isin(identities, id))[0]
     spike_times=np.empty(len(y))
     for i in range(0,len(y)):
         z=y[i]

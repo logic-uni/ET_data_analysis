@@ -209,3 +209,73 @@ def population_spikecounts(neuron_id,marker_start,marker_end,Artificial_time_div
     '''
     time_len=(int(marker_end)-int(marker_end)%Artificial_time_division)/bin
     return neurons,time_len
+
+def manifold_dynamic(redu_dim_data,stage):  #动态流形，无时间区间颜色标记，用于trial_average，只需输入降维后的，无需marker
+    fig = plt.figure()
+    ax = fig.add_subplot(projection = '3d')
+    ax.set_title(f"Essential Tremor Manifold, {stage}")
+    ax.set_xlabel("PC1")
+    ax.set_ylabel("PC2")
+    ax.set_zlabel("PC3")
+    plt.grid(True)
+    plt.ion()  # interactive mode on!!!! 很重要,有了他就不需要plt.show()了
+    for j in range(0,len(redu_dim_data)):
+        ax.plot3D(redu_dim_data[j:j+2,0],redu_dim_data[j:j+2,1],redu_dim_data[j:j+2,2],'blue')
+        plt.pause(0.01)
+
+def manifold_dynamic_colored_intervals(redu_dim_data,marker,time_len_int_aft_bin,region_name,redu_method):  #动态流形，时间区间颜色标记
+    p=0 # p控制颜色
+    colors = ['#ffcccc', '#ff6666', '#ff3333', '#cc0000'] #从浅红到深红的颜色列表，用于不同速度挡位画图区分
+    velocity_level=np.array(marker['velocity_level'][1::2])
+    fig = plt.figure()
+    ax =  fig.add_subplot(projection = '3d')
+    ax.set_title(f"{region_name}_{redu_method}_manifold_colored_intervals")
+    ax.set_xlabel("PC1")
+    ax.set_ylabel("PC2")
+    ax.set_zlabel("PC3")
+    plt.grid(True)
+    plt.ion()  # interactive mode on!!!! 很重要,有了他就不需要plt.show()了
+    for i in range(0,len(marker['run_or_stop'])-1):
+        left=int(marker['time_interval_left_end'].iloc[i]/fr_bin)
+        right=int(marker['time_interval_right_end'].iloc[i]/fr_bin)
+        for j in range(left,right):
+            if marker['run_or_stop'].iloc[i] == 1:
+                ax.plot3D(redu_dim_data[j:j+2,0],redu_dim_data[j:j+2,1],redu_dim_data[j:j+2,2],colors[int(velocity_level[p])])
+            else:
+                ax.plot3D(redu_dim_data[j:j+2,0],redu_dim_data[j:j+2,1],redu_dim_data[j:j+2,2],'blue')
+            plt.pause(0.01)
+        if marker['run_or_stop'].iloc[i] == 1:
+            p=p+1
+    end_inter_start=int(marker['time_interval_left_end'].iloc[-1]/fr_bin)
+    for m in range(end_inter_start,time_len_int_aft_bin):
+        ax.plot3D(redu_dim_data[m:m+2,0],redu_dim_data[m:m+2,1],redu_dim_data[m:m+2,2],'blue')
+
+'''
+def manifold_fixed_colored_intervals(X_isomap,marker,time_len_int_aft_bin): 
+    colors=[None] * time_len_int_aft_bin
+    for i in range(0,len(marker['run_or_stop'])-1):
+        t_left_withbin=int(marker['time_interval_left_end'].iloc[i]/fr_bin)
+        t_right_withbin=int(marker['time_interval_right_end'].iloc[i]/fr_bin)
+        if marker['run_or_stop'].iloc[i] == 1:
+            colors[t_left_withbin:t_right_withbin] = ['red'] * (t_right_withbin-t_left_withbin)
+        else:
+            colors[t_left_withbin:t_right_withbin] = ['blue'] * (t_right_withbin-t_left_withbin)
+
+    end_inter_start=int(marker['time_interval_left_end'].iloc[-1]/fr_bin)
+    colors[end_inter_start:time_len_int_aft_bin] = ['blue'] * (time_len_int_aft_bin-end_inter_start)
+    print(len(colors))
+    manifold_fixed(X_isomap,colors)
+'''
+
+#流形动画
+marker_start = marker['time_interval_left_end'].iloc[0]
+marker_end = marker['time_interval_right_end'].iloc[-1]
+data,time_len = population_spikecounts(neuron_id,marker_start,marker_end,30,fr_bin)
+data2pca_each_trail=data.T
+redu_dim_data_ISOMAP=reduce_dimension_ISOMAP(data2pca_each_trail,0.1,region_name,stage='all_session')
+manifold_dynamic_colored_intervals(redu_dim_data_ISOMAP,marker,fr_bin,int(time_len),region_name,redu_method='ISOMAP')
+
+run_redu_dim_aver=reduce_dimension(run2pca,0.1,region_name,stage='Run')
+#manifold_dynamic(run_redu_dim_aver,'Run')
+stop_redu_dim_aver=reduce_dimension(stop2pca,0.1,region_name,stage='Stop')
+#manifold_dynamic(stop_redu_dim_aver,'Stop') 

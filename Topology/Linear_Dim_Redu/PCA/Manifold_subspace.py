@@ -375,12 +375,12 @@ def main(neurons,marker):
         data,time_len = popu_fr_onetrial(neuron_id,marker_start,marker_end)
         data_norm=normalize_fr(data)
         data2pca=data_norm.T
-        '''
+
         ### manifold surface
         data2pca=data.T
         redu_dim_data=reduce_dimension(data2pca,0.1,region_name,stage='all_session')
         plot_surface_2(redu_dim_data[:,0],redu_dim_data[:,1],redu_dim_data[:,2])
-        '''
+    
         ### manifold each trail
         data2pca_each_trail=data.T
         redu_dim_data=reduce_dimension(data2pca_each_trail,0.1,region_name,stage='all_session')

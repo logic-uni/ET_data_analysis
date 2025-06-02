@@ -1,7 +1,7 @@
 """
 # coding: utf-8
 @author: Yuhao Zhang
-last updated: 05/31/2025
+last updated: 06/02/2025
 data from: Xinchao Chen
 """
 import numpy as np
@@ -25,17 +25,17 @@ np.set_printoptions(threshold=np.inf)
 data_path = '/data2/zhangyuhao/xinchao_data/Givenme/1423_15_control-Day1-1CVC-FM_g0'
 save_path = '/home/zhangyuhao/Desktop/Result/ET/Manifold/NP2/givenme/1423_15_control-Day1-1CVC-FM_g0'
 # ------- NO NEED CHANGE -------
+fr_bin = 1
 ### Behavior
-Marker = pd.read_csv(data_path+'/Behavior/marker.csv')
+Marker = pd.read_csv(data_path+'/Behavior/marker.csv') 
 print(Marker)
+
 ### Electrophysiology
 fs = 30000  # spikeGLX neuropixel sample rate
-
 identities = np.load(data_path+'/Sorted/kilosort4/spike_clusters.npy') # time series: unit id of each spike
 times = np.load(data_path+'/Sorted/kilosort4/spike_times.npy')  # time series: spike time of each spike
 neurons = pd.read_csv(data_path+'/Sorted/kilosort4/mapping_artifi.csv')
 print(neurons)
-
 # 按region分组，提取每组的第一列cluster_id
 region_groups = neurons.groupby('region')
 region_cluster_ids = {}
@@ -59,7 +59,7 @@ def singleneuron_spiketimes(id):
         spike_times[i]=times[z]/fs
     return spike_times
 
-def popu_fr_onetrial(neuron_ids,marker_start,marker_end,fr_bin):   
+def popu_fr_onetrial(neuron_ids,marker_start,marker_end):   
     for j in range(len(neuron_ids)): #第j个neuron
         spike_times = singleneuron_spiketimes(neuron_ids[j])
         spike_times_trail = spike_times[(spike_times > marker_start) & (spike_times < marker_end)]
@@ -89,8 +89,6 @@ def reduce_dimension(count,bin_size,region_name,n_components): # 默认: 0.1 感
     #X_tsne = TSNE(n_components=3,random_state=21,perplexity=20).fit_transform(rate.values)  #t-SNE没有Explained variance，t-SNE 旨在保留局部结构而不是全局方差
     return X_pca
 
-
-### manifold
 def adjust_array(arr):
     if any(x < 0 for x in arr):
         min_val = min(arr)
@@ -197,7 +195,7 @@ def reduce_dimension(count,bin_size,region_name,stage): # 默认: 0.1 感觉改b
     plt.ylabel('Value')
     plt.legend()
     #plt.show()
-    plt.savefig(save_path+f"/{region_name}_{stage}_PC_explained variance ratio.png",dpi=600,bbox_inches = 'tight')
+    plt.savefig(save_path+f"/{region_name}_{stage}_PC_explained_var_ratio.png",dpi=600,bbox_inches = 'tight')
     X_isomap = Isomap(n_components = 3, n_neighbors = 21).fit_transform(rate.values)  #对应的是Residual variance
     #X_tsne = TSNE(n_components=3,random_state=21,perplexity=20).fit_transform(rate.values)  #t-SNE没有Explained variance，t-SNE 旨在保留局部结构而不是全局方差
     return X_isomap
@@ -227,7 +225,7 @@ def reduce_dimension_ISOMAP(count,bin_size,region_name,stage): # 默认: 0.1 感
     plt.ylabel('Residual Variance')
     plt.title(f"{region_name}_{stage}_Isomap Residual Variance")
     #plt.show()
-    plt.savefig(save_path+f"/{region_name}_{stage}_Isomap Residual Variance.png",dpi=600,bbox_inches = 'tight')
+    plt.savefig(save_path+f"/{region_name}_{stage}_Isomap_Residual_Var.png",dpi=600,bbox_inches = 'tight')
 
     return X_isomap
 
@@ -252,7 +250,7 @@ def manifold_fixed_colored_intervals(redu_dim_data,marker,time_len_int_aft_bin,r
         plt.title(f"{region_name}_{redu_method}_manifold_colored_intervals_PC{a+1}")
         plt.xlabel("t")
         #plt.show()
-        plt.savefig(save_path+f"/{region_name}_{redu_method}_manifold_colored_intervals_PC{a+1}.png",dpi=600,bbox_inches = 'tight')
+        plt.savefig(save_path+f"/{region_name}_{redu_method}_col_interv_PC{a+1}.png",dpi=600,bbox_inches = 'tight')
 
     #画三维manifold
     p=0 # p控制颜色
@@ -275,7 +273,7 @@ def manifold_fixed_colored_intervals(redu_dim_data,marker,time_len_int_aft_bin,r
     ax.plot3D(redu_dim_data[end_inter_start:time_len_int_aft_bin,0],redu_dim_data[end_inter_start:time_len_int_aft_bin,1],redu_dim_data[end_inter_start:time_len_int_aft_bin,2],'blue')
 
     #plt.show()
-    plt.savefig(save_path+f"/{region_name}_{redu_method}_manifold_colored_intervals.png",dpi=600,bbox_inches = 'tight')
+    plt.savefig(save_path+f"/{region_name}_{redu_method}_col_interv.png",dpi=600,bbox_inches = 'tight')
 
 def manifold_dynamic_colored_intervals(redu_dim_data,marker,time_len_int_aft_bin,region_name,redu_method):  #动态流形，时间区间颜色标记
     p=0 # p控制颜色
@@ -312,7 +310,7 @@ def manifold_fixed(redu_dim_data,stage,region_name):  #静态流形，无时间�
         plt.title(f"{region_name}_{stage}_manifold_trail_average_PC{i+1}")
         plt.xlabel("t")
         #plt.show()
-        plt.savefig(save_path+f"/{region_name}_{stage}_PC{i+1}_manifold_trail_average.png",dpi=600,bbox_inches = 'tight')
+        plt.savefig(save_path+f"/{region_name}_{stage}_PC{i+1}_trail_average.png",dpi=600,bbox_inches = 'tight')
     #画三维manifold
     fig = plt.figure()
     ax = fig.add_subplot(projection = '3d')
@@ -321,8 +319,7 @@ def manifold_fixed(redu_dim_data,stage,region_name):  #静态流形，无时间�
     ax.set_xlabel("PC1")
     ax.set_ylabel("PC2")
     ax.set_zlabel("PC3")
-    plt.savefig(save_path+f"/{region_name}_{stage}_manifold_trail_average.png",dpi=600,bbox_inches = 'tight')
-    
+    plt.savefig(save_path+f"/{region_name}_{stage}_trail_average.png",dpi=600,bbox_inches = 'tight')
 
 def manifold_dynamic(redu_dim_data,stage):  #静态流形，无时间区间颜色标记，用于trial_average，只需输入降维后的，无需marker
     fig = plt.figure()
@@ -358,25 +355,20 @@ def plot_hyper_plane(X, y,X_pca):
     # 使用线性回归拟合超平面
     model = LinearRegression()
     model.fit(X, y)
-
-    # 超平面的系数
+    # 超平面系数
     w = model.coef_
     b = model.intercept_
-
     # 计算超平面在PCA降维后的空间中的斜率和截距
     slope = -w[0] / w[1]
     intercept = -b / w[1]
-
     # 绘制数据点和超平面在PCA降维后的空间中
     plt.scatter(X_pca[:, 0], X_pca[:, 1], c=y, cmap='viridis', edgecolors='k')
     plt.xlabel('Principal Component 1')
     plt.ylabel('Principal Component 2')
-
     # 绘制超平面
     x_vals = np.array(plt.gca().get_xlim())
     y_vals = intercept + slope * x_vals
     plt.plot(x_vals, y_vals, '--', color='red', label='Hyperplane')
-
     plt.legend()
     plt.title('Hyperplane in PCA-reduced Space')
     plt.show()
@@ -432,14 +424,12 @@ def manifold_fitplane(X_isomap):
 def plot_surface_2(x,y,z):
     f = interpolate.interp2d(x, y, z, kind='cubic')
     znew = f(x, y)
-
     #修改x,y，z输入画图函数前的shape
     xx1, yy1 = np.meshgrid(x, y)
     newshape = (xx1.shape[0])*(xx1.shape[0])
     y_input = xx1.reshape(newshape)
     x_input = yy1.reshape(newshape)
     z_input = znew.reshape(newshape)
-
     #画图
     sns.set(style='white')
     fig = plt.figure()
@@ -601,13 +591,12 @@ def normalize_fr(data2dis):
 
 def main(neurons,marker):
     for region_name, neuron_id in region_cluster_ids.items():  # 遍历所有的脑区及其对应的neuron id
-
         print(f"Region: {region_name} ")
         print(f"Neuron IDs: {neuron_id}")
         marker_start = marker['time_interval_left_end'].iloc[0]
         marker_end = marker['time_interval_right_end'].iloc[-1]
 
-        data,time_len = population_spikecounts(neuron_id,marker_start,marker_end,30)
+        data,time_len = popu_fr_onetrial(neuron_id,marker_start,marker_end)
         data_norm=normalize_fr(data)
         data2pca=data_norm.T
         '''

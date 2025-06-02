@@ -1,40 +1,69 @@
 """
 # coding: utf-8
 @author: Yuhao Zhang
-last updated: 08/27/2024
+last updated: 06/02/2025
 data from: Xinchao Chen
 """
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import warnings
 from sklearn.metrics import pairwise_distances
 from sklearn.decomposition import PCA
+import neo
+import quantities as pq
+from elephant.conversion import BinnedSpikeTrain
 np.set_printoptions(threshold=np.inf)
 
-### path
-mice = '20230623_Syt2_conditional_tremor_mice4'
-main_path = r'E:\xinchao\sorted neuropixels data\useful_data\20230623_Syt2_conditional_tremor_mice4\data'
-fig_save_path = r'C:\Users\zyh20\Desktop\ET_data analysis\manifold\20230623_Syt2_conditional_tremor_mice4'
-dis_save_path = r'C:\Users\zyh20\Desktop\ET_data analysis\manifold\runstop_center_distance'
+# ------- NEED CHANGE -------
+data_path = '/data2/zhangyuhao/xinchao_data/Givenme/1423_15_control-Day1-1CVC-FM_g0'
+save_path = '/home/zhangyuhao/Desktop/Result/ET/Manifold/NP2/givenme/1423_15_control-Day1-1CVC-FM_g0'
+# ------- NO NEED CHANGE -------
+fr_bin = 0.1
+### Behavior
+Marker = pd.read_csv(data_path+'/Behavior/marker.csv') 
+print(Marker)
 
-### marker
-treadmill = pd.read_csv(main_path+'/marker/treadmill_move_stop_velocity.csv',index_col=0)
-print(treadmill)
-
-### electrophysiology
-sample_rate=30000 #spikeGLX neuropixel sample rate
-identities = np.load(main_path+'/spike_train/spike_clusters.npy') #存储neuron的编号id,对应phy中的第一列id
-times = np.load(main_path+'/spike_train/spike_times.npy')  #
-channel = np.load(main_path+'/spike_train/channel_positions.npy')
-neurons = pd.read_csv(main_path+'/spike_train/region_neuron_id.csv', low_memory = False,index_col=0)#防止弹出警告
+### Electrophysiology
+fs = 30000  # spikeGLX neuropixel sample rate
+identities = np.load(data_path+'/Sorted/kilosort4/spike_clusters.npy') # time series: unit id of each spike
+times = np.load(data_path+'/Sorted/kilosort4/spike_times.npy')  # time series: spike time of each spike
+neurons = pd.read_csv(data_path+'/Sorted/kilosort4/mapping_artifi.csv')
 print(neurons)
-print("检查treadmill总时长和电生理总时长是否一致")
-print("电生理总时长")
-print((times[-1]/sample_rate)[0])
-print("跑步机总时长") 
-print(treadmill['time_interval_right_end'].iloc[-1])
+# 按region分组，提取每组的第一列cluster_id
+region_groups = neurons.groupby('region')
+region_cluster_ids = {}
+for region, group in region_groups:
+    # 提取每组的第一列（cluster_id），去除缺失值
+    cluster_ids = group.iloc[:, 0].dropna().astype(int).values
+    region_cluster_ids[region] = cluster_ids
+
+print("Test if Ephys duration same as motion duration...")
+print(f"Ephys duration: {(times[-1]/fs)} s")  # for NP1, there's [0] after times[-1]/fs
+print(f"motion duration: {Marker['time_interval_right_end'].iloc[-1]} s")
 neuron_num = neurons.count().transpose().values
+
+def singleneuron_spiketimes(id):
+    x = np.where(identities == id)
+    y=x[0]
+    #y = np.where(np.isin(identities, id))[0]
+    spike_times=np.empty(len(y))
+    for i in range(0,len(y)):
+        z=y[i]
+        spike_times[i]=times[z]/fs
+    return spike_times
+
+def popu_fr_onetrial(neuron_ids,marker_start,marker_end):   
+    for j in range(len(neuron_ids)): #第j个neuron
+        spike_times = singleneuron_spiketimes(neuron_ids[j])
+        spike_times_trail = spike_times[(spike_times > marker_start) & (spike_times < marker_end)]
+        spiketrain = neo.SpikeTrain(spike_times_trail,units='sec',t_start=marker_start, t_stop=marker_end)
+        fr = BinnedSpikeTrain(spiketrain, bin_size=fr_bin*pq.ms,tolerance=None)
+        one_neruon = fr.to_array().astype(int)[0]
+        if j == 0:
+            neurons = one_neruon
+        else:
+            neurons = np.vstack((neurons, one_neruon))
+    return neurons
 
 def splicing_neural_data(time,data):
     phy = np.zeros((1, 3))
@@ -118,7 +147,7 @@ def manifold_center_distance(data,marker,region_name):
     ax.set_zlabel('PC3')
     ax.legend()
     #plt.show()
-    plt.savefig(fig_save_path+f"/run and stop center of neural manifold_{region_name}.png",dpi=600,bbox_inches = 'tight')
+    plt.savefig(save_path+f"/run_stop_center_manifold_{region_name}.png",dpi=600,bbox_inches = 'tight')
     '''
     return high_dist,three_dist
 
@@ -148,7 +177,7 @@ def main_function(neurons,marker):
         marker_end = marker['time_interval_right_end'].iloc[-1]
         
         ### manifold_distance
-        data2dis,time_len = population_spikecounts(neuron_id,marker_start,marker_end,30,0.1)
+        data2dis = popu_fr_onetrial(neuron_id,marker_start,marker_end)
         #高维距离,三维距离
         normalized_data = normalize_fr(data2dis)#对原始firing rate进行normalize，以便于分析距离差异
         high_dist,three_dist = manifold_center_distance(normalized_data,marker,region_name)
@@ -159,6 +188,6 @@ def main_function(neurons,marker):
     # manifold_distance
     manifold_dist = {'region': neurons.columns.values, 'high_dim_dist': high_dim_dist_all,'three_dim_dist': three_dim_dist_all}
     df = pd.DataFrame(manifold_dist)
-    df.to_csv(dis_save_path+f"/{mice}_manifold_run_stop_distance.csv", index=False)
+    df.to_csv(save_path+f"/manifold_run_stop_distance.csv", index=False)
 
 main_function(neurons,treadmill)

@@ -89,90 +89,6 @@ def reduce_dimension(count,bin_size,region_name,n_components): # 默认: 0.1 感
     #X_tsne = TSNE(n_components=3,random_state=21,perplexity=20).fit_transform(rate.values)  #t-SNE没有Explained variance，t-SNE 旨在保留局部结构而不是全局方差
     return X_pca
 
-def adjust_array(arr):
-    if any(x < 0 for x in arr):
-        min_val = min(arr)
-        diff = -min_val
-        arr = [x + diff for x in arr]
-    return np.array(arr)
-
-def oneDdynamic(count,bin_size,region_name): # 默认: 0.1 感觉改bin_size影响不大，改firing rate的bin size影响较大
-    #smooth data
-    count = pd.DataFrame(count)
-    rate = np.sqrt(count/bin_size)
-    #对数据做均值  默认: window=50  min_periods=1  感觉改这些值影响不大，改firing的bin size影响较大
-    rate = rate.rolling(window=50,win_type='gaussian',center=True,min_periods=1, axis = 0).mean(std=2) 
-    #reduce dimension
-    '''
-    ## PCA
-    pca = PCA(n_components=1)
-    X_pca = pca.fit_transform(rate.values)   #对应的是Explained variance
-    explained_variance_ratio = pca.explained_variance_ratio_   #每个主成分所解释的方差比例
-    explained_variance_sum = np.cumsum(explained_variance_ratio)  #计算累积解释方差比例
-    #画explained_variance图
-    x=list(range(len(explained_variance_ratio)))
-    '''
-    fig = plt.figure()
-    X_isomap = Isomap(n_components = 1, n_neighbors = 21).fit_transform(rate.values)  #对应的是Residual variance
-
-    ### 原始降维到一维后的值随时间变化
-    # 小球距离曲线的偏移量
-    offset = 7
-    array = np.transpose(X_isomap)[0]
-    adjusted_array = adjust_array(array)
-    # 初始化动画
-    y=adjusted_array
-    x=np.arange(0,len(y))
-    fig, ax = plt.subplots()
-    line, = ax.plot(x, y, linestyle='-', color='b')
-    ball, = ax.plot([], [], marker='o', markersize=7, color='r')
-    # 设置图形界面属性
-    ax.set_xlim(np.min(x), np.max(x))
-    ax.set_ylim(np.min(y) - 1, np.max(y) + 1)
-    ax.set_title(f"{region_name}_dynamic_1D")
-    ax.set_xlabel("time")
-    ax.set_ylabel("neural state")
-    ax.grid(True)
-    # 更新函数，用于每一帧的更新
-    def update(frame):
-        ball_x = x[frame]
-        ball_y = y[frame] + offset  # 小球在曲线上方的位置偏移
-        ball.set_data([ball_x],[ball_y])
-        return line, ball,
-    # 创建动画
-    ani = FuncAnimation(fig, update, frames=len(x), interval=20, blit=True)
-    # 使用imagemagick将动画保存为GIF图片
-    ani.save(save_path+f"/1Ddynamic_{region_name}_dynamic_raw.gif", writer='pillow')
-
-    ### y=x^2 李雅普诺夫能量函数
-    # 小球距离曲线的偏移量
-    offset = 7
-    array = np.transpose(X_isomap)[0]
-    adjusted_array = adjust_array(array)
-    # 初始化动画
-    x=adjusted_array
-    y=x*x
-    fig, ax = plt.subplots()
-    line, = ax.plot(x, y, linestyle='-', color='b')
-    ball, = ax.plot([], [], marker='o', markersize=7, color='r')
-    # 设置图形界面属性
-    ax.set_xlim(np.min(x), np.max(x))
-    ax.set_ylim(np.min(y) - 1, np.max(y) + 1)
-    ax.set_title(f"{region_name}_dynamic_1D")
-    ax.set_xlabel("time")
-    ax.set_ylabel("neural energy")
-    ax.grid(True)
-    # 更新函数，用于每一帧的更新
-    def update(frame):
-        ball_x = x[frame]
-        ball_y = y[frame] + offset  # 小球在曲线上方的位置偏移
-        ball.set_data([ball_x], [ball_y])
-        return line, ball,
-    # 创建动画
-    ani = FuncAnimation(fig, update, frames=len(x), interval=20, blit=True)
-    # 使用imagemagick将动画保存为GIF图片
-    ani.save(save_path+f"/1Ddynamic_{region_name}_dynamic_x^2.gif", writer='pillow')
-
 def reduce_dimension(count,bin_size,region_name,stage): # 默认: 0.1 感觉改bin_size影响不大，改firing rate的bin size影响较大
     #smooth data
     count = pd.DataFrame(count)
@@ -229,127 +145,105 @@ def reduce_dimension_ISOMAP(count,bin_size,region_name,stage): # 默认: 0.1 感
 
     return X_isomap
 
-def manifold_fixed_colored_intervals(redu_dim_data,marker,time_len_int_aft_bin,region_name,redu_method):  #静态流形，时间区间颜色标记
-    #colors = ['#ffcccc', '#ff6666', '#ff3333', '#cc0000'] #从浅红到深红的颜色列表，用于不同速度挡位画图区分
-    #velocity_level=np.array(marker['velocity_level'][1::2])
-    #分别单独画前三个PC
-    for a in range(0,3):
-        q=0 # q控制颜色
-        fig = plt.figure()
-        for i in range(0,len(marker['run_or_stop'])-1):
-            left=int(marker['time_interval_left_end'].iloc[i]/bin)
-            right=int(marker['time_interval_right_end'].iloc[i]/bin)
-            x_run=np.arange(left-2,right+2)
-            x_stop=np.arange(left,right)
-            if marker['run_or_stop'].iloc[i] == 1:
-                #plt.plot(x_run,redu_dim_data[left-2:right+2,a],color=colors[int(velocity_level[q])])
-                plt.plot(x_run,redu_dim_data[left-2:right+2,a],color='r')
-                q=q+1
-            else:
-                plt.plot(x_stop,redu_dim_data[left:right,a],color='blue')
-        plt.title(f"{region_name}_{redu_method}_manifold_colored_intervals_PC{a+1}")
-        plt.xlabel("t")
-        #plt.show()
-        plt.savefig(save_path+f"/{region_name}_{redu_method}_col_interv_PC{a+1}.png",dpi=600,bbox_inches = 'tight')
+def plot_hyper_plane(X, y,X_pca):
+    # 使用线性回归拟合超平面
+    model = LinearRegression()
+    model.fit(X, y)
+    # 超平面系数
+    w = model.coef_
+    b = model.intercept_
+    # 计算超平面在PCA降维后的空间中的斜率和截距
+    slope = -w[0] / w[1]
+    intercept = -b / w[1]
+    # 绘制数据点和超平面在PCA降维后的空间中
+    plt.scatter(X_pca[:, 0], X_pca[:, 1], c=y, cmap='viridis', edgecolors='k')
+    plt.xlabel('Principal Component 1')
+    plt.ylabel('Principal Component 2')
+    # 绘制超平面
+    x_vals = np.array(plt.gca().get_xlim())
+    y_vals = intercept + slope * x_vals
+    plt.plot(x_vals, y_vals, '--', color='red', label='Hyperplane')
+    plt.legend()
+    plt.title('Hyperplane in PCA-reduced Space')
+    plt.savefig(save_path+f"/Hyperplane.png",dpi=600,bbox_inches = 'tight')
 
-    #画三维manifold
-    p=0 # p控制颜色
+def interp_helper(values, num=50, kind='quadratic'):
+    interp_i = np.linspace(min(values), max(values), num)
+    return interp1d(np.linspace(min(values), max(values), len(values)), values, kind=kind)(interp_i)
+
+def plot_normal_vector(normal_vector):
+    #plot normal vector
     fig = plt.figure()
-    ax = fig.add_subplot(projection = '3d')
-    ax.set_title(f"{region_name}_{redu_method}_manifold_colored_intervals")
-    ax.set_xlabel("PC1")
-    ax.set_ylabel("PC2")
-    ax.set_zlabel("PC3")
-    for i in range(0,len(marker['run_or_stop'])-1):
-        left=int(marker['time_interval_left_end'].iloc[i]/bin)
-        right=int(marker['time_interval_right_end'].iloc[i]/bin)
-        if marker['run_or_stop'].iloc[i] == 1:
-            #ax.plot3D(redu_dim_data[left-2:right+2,0],redu_dim_data[left-2:right+2,1],redu_dim_data[left-2:right+2,2],colors[int(velocity_level[p])])
-            ax.plot3D(redu_dim_data[left-2:right+2,0],redu_dim_data[left-2:right+2,1],redu_dim_data[left-2:right+2,2],'r')
-            p=p+1
-        else:
-            ax.plot3D(redu_dim_data[left:right,0],redu_dim_data[left:right,1],redu_dim_data[left:right,2],'blue')
-    end_inter_start=int(marker['time_interval_left_end'].iloc[-1]/bin)
-    ax.plot3D(redu_dim_data[end_inter_start:time_len_int_aft_bin,0],redu_dim_data[end_inter_start:time_len_int_aft_bin,1],redu_dim_data[end_inter_start:time_len_int_aft_bin,2],'blue')
+    ax = fig.gca(projection='3d')
+    a=[0,0,0]
+    a_count=0
+    b=[0,0,0]
+    b_count=0
+    for i in range(0,len(normal_vector)):
+        if i ==0 or i ==5 or i ==10 or i ==11 or i ==18 or i ==19 or 24 <= i <= 26 or 33 <= i <= 34 or 38 <= i <= 40 or 44 <= i <= 46:
+            ax.quiver(0,0,0,normal_vector[i,0],normal_vector[i,1],normal_vector[i,2],arrow_length_ratio=0.1,color='r',length=5, normalize=True)
+            a=a+normal_vector[i]
+            a_count=a_count+1
+        if 1 <= i <= 4 or 6 <= i <= 9 or 12 <= i <= 17 or 20 <= i <= 23 or 27 <= i <= 32 or 35 <= i <= 37 or 41 <= i <= 43:
+            ax.quiver(0,0,0,normal_vector[i,0],normal_vector[i,1],normal_vector[i,2],arrow_length_ratio=0.1,color='b',length=5, normalize=True)
+            b=b+normal_vector[i]
+            b_count=b_count+1
+    # compute average motion vectors and average rest vectors
+    a_av=a/a_count
+    b_av=b/b_count
+    ax.quiver(0,0,0,a_av[0],a_av[1],a_av[2],arrow_length_ratio=0.1,color='g',length=8, normalize=True)
+    ax.quiver(0,0,0,b_av[0],b_av[1],b_av[2],arrow_length_ratio=0.1,color='y',length=8, normalize=True)
+    #compute included angle
+    cos_angle = np.dot(a_av, b_av) / (np.linalg.norm(a_av) * np.linalg.norm(b_av))
+    angle = np.arccos(cos_angle)
+    print('夹角为：', angle * 180 / np.pi, '度')
+    ax.set_xlim(-8.05,8.05)
+    ax.set_ylim(-8.05,8.05)
+    ax.set_zlim(-8.05,8.05)
+    plt.show()
 
-    #plt.show()
-    plt.savefig(save_path+f"/{region_name}_{redu_method}_col_interv.png",dpi=600,bbox_inches = 'tight')
-
-def manifold_dynamic_colored_intervals(redu_dim_data,marker,time_len_int_aft_bin,region_name,redu_method):  #动态流形，时间区间颜色标记
-    p=0 # p控制颜色
-    colors = ['#ffcccc', '#ff6666', '#ff3333', '#cc0000'] #从浅红到深红的颜色列表，用于不同速度挡位画图区分
-    velocity_level=np.array(marker['velocity_level'][1::2])
-    fig = plt.figure()
-    ax =  fig.add_subplot(projection = '3d')
-    ax.set_title(f"{region_name}_{redu_method}_manifold_colored_intervals")
-    ax.set_xlabel("PC1")
-    ax.set_ylabel("PC2")
-    ax.set_zlabel("PC3")
-    plt.grid(True)
-    plt.ion()  # interactive mode on!!!! 很重要,有了他就不需要plt.show()了
-    for i in range(0,len(marker['run_or_stop'])-1):
-        left=int(marker['time_interval_left_end'].iloc[i]/bin)
-        right=int(marker['time_interval_right_end'].iloc[i]/bin)
-        for j in range(left,right):
-            if marker['run_or_stop'].iloc[i] == 1:
-                ax.plot3D(redu_dim_data[j:j+2,0],redu_dim_data[j:j+2,1],redu_dim_data[j:j+2,2],colors[int(velocity_level[p])])
-            else:
-                ax.plot3D(redu_dim_data[j:j+2,0],redu_dim_data[j:j+2,1],redu_dim_data[j:j+2,2],'blue')
-            plt.pause(0.01)
-        if marker['run_or_stop'].iloc[i] == 1:
-            p=p+1
-    end_inter_start=int(marker['time_interval_left_end'].iloc[-1]/bin)
-    for m in range(end_inter_start,time_len_int_aft_bin):
-        ax.plot3D(redu_dim_data[m:m+2,0],redu_dim_data[m:m+2,1],redu_dim_data[m:m+2,2],'blue')
-
-def manifold_fixed(redu_dim_data,stage,region_name):  #静态流形，无时间区间颜色标记，用于trial_average，只需输入降维后的，无需marker
-    #分别单独画前三个PC
-    for i in range(0,3):
-        fig = plt.figure()
-        plt.plot(redu_dim_data[:,i])
-        plt.title(f"{region_name}_{stage}_manifold_trail_average_PC{i+1}")
-        plt.xlabel("t")
-        #plt.show()
-        plt.savefig(save_path+f"/{region_name}_{stage}_PC{i+1}_trail_average.png",dpi=600,bbox_inches = 'tight')
-    #画三维manifold
-    fig = plt.figure()
-    ax = fig.add_subplot(projection = '3d')
-    ax.plot3D(redu_dim_data[:,0],redu_dim_data[:,1],redu_dim_data[:,2],'blue')
-    ax.set_title(f"{region_name}_{stage}_manifold_trail_average")
-    ax.set_xlabel("PC1")
-    ax.set_ylabel("PC2")
-    ax.set_zlabel("PC3")
-    plt.savefig(save_path+f"/{region_name}_{stage}_trail_average.png",dpi=600,bbox_inches = 'tight')
-
-def manifold_dynamic(redu_dim_data,stage):  #静态流形，无时间区间颜色标记，用于trial_average，只需输入降维后的，无需marker
-    fig = plt.figure()
-    ax = fig.add_subplot(projection = '3d')
-    ax.set_title(f"Essential Tremor Manifold, {stage}")
-    ax.set_xlabel("PC1")
-    ax.set_ylabel("PC2")
-    ax.set_zlabel("PC3")
-    plt.grid(True)
-    plt.ion()  # interactive mode on!!!! 很重要,有了他就不需要plt.show()了
-    for j in range(0,len(redu_dim_data)):
-        ax.plot3D(redu_dim_data[j:j+2,0],redu_dim_data[j:j+2,1],redu_dim_data[j:j+2,2],'blue')
+def manifold_fitplane(X_isomap):
+    for i in range(0,len(X_isomap)):
+        ax.scatter(x_track[:,0], x_track[:,1], x_track[:,2], 'blue')
+        x_track_s=[X_isomap[i,0],X_isomap[i,1],X_isomap[i,2]]
+        x_track = np.vstack((x_track, x_track_s))
         plt.pause(0.01)
-
-'''
-def manifold_fixed_colored_intervals(X_isomap,marker,time_len_int_aft_bin): 
-    colors=[None] * time_len_int_aft_bin
-    for i in range(0,len(marker['run_or_stop'])-1):
-        t_left_withbin=int(marker['time_interval_left_end'].iloc[i]/bin)
-        t_right_withbin=int(marker['time_interval_right_end'].iloc[i]/bin)
-        if marker['run_or_stop'].iloc[i] == 1:
-            colors[t_left_withbin:t_right_withbin] = ['red'] * (t_right_withbin-t_left_withbin)
-        else:
-            colors[t_left_withbin:t_right_withbin] = ['blue'] * (t_right_withbin-t_left_withbin)
-
-    end_inter_start=int(marker['time_interval_left_end'].iloc[-1]/bin)
-    colors[end_inter_start:time_len_int_aft_bin] = ['blue'] * (time_len_int_aft_bin-end_inter_start)
-    print(len(colors))
-    manifold_fixed(X_isomap,colors)
-'''
+    #plot fixed 3D trajectory
+    fig = plt.figure()   
+    ax = fig.gca(projection='3d')
+    ax.scatter(X_isomap[:,0],X_isomap[:,1],X_isomap[:,2],label='Essential Tremor Neural Manifold')  #分别取三列的值作为x,y,z的值
+    ax.legend()
+    plt.savefig(save_path+f"/fixed3D.png",dpi=600,bbox_inches = 'tight')
+    # plot 3D colored smooth trajectory
+    x_new, y_new, z_new = (interp_helper(i,800) for i in (X_isomap[:,0], X_isomap[:,1], X_isomap[:,2]))
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    zmax = np.array(z_new).max()
+    zmin = np.array(z_new).min()
+    for i in range(len(z_new) - 1):
+        ax.plot(x_new[i:i + 2], y_new[i:i + 2], z_new[i:i + 2],
+                color=plt.cm.jet(int((np.array(z_new[i:i + 2]).mean() - zmin) * 255 / (zmax - zmin))))
+    plt.title('Essential Tremor Neural Manifold')
+    plt.savefig(save_path+f"/3Dcolored.png",dpi=600,bbox_inches = 'tight')
+    
+    #fit plane
+    v1=fit_plane(X_isomap[0:215,0],X_isomap[0:215,1],X_isomap[0:215,2],'r')
+    #normal vector
+    #vv1 = np.vstack((v1, v2))
+    #print(vv14)
+    # normlize x to same symbol
+    for i in range(0,len(v)):
+        if v[i,2] > 0:
+            v[i,0]=(-1)*v[i,0]
+            v[i,1]=(-1)*v[i,1]
+            v[i,2]=(-1)*v[i,2]
+    print(v)
+    # amplify
+    v=v*10
+    print(v)
+    plot_normal_vector(v)
+    plt.savefig(save_path+f"/vector.png",dpi=600,bbox_inches = 'tight')
+    return X_isomap
 
 def plot_surface_2(x,y,z):
     f = interpolate.interp2d(x, y, z, kind='cubic')
@@ -366,6 +260,43 @@ def plot_surface_2(x,y,z):
     ax = fig.add_subplot(111, projection='3d')
     ax.plot_trisurf(x_input,y_input,z_input,cmap=cm.coolwarm)
     plt.savefig(save_path+f"/surface.png",dpi=600,bbox_inches = 'tight')
+
+def fit_plane(xs,ys,zs,color_name):
+    ax = plt.subplot(projection = '3d')
+    # do fit
+    tmp_A = [] #存储x和y
+    tmp_b = [] #存储z
+    for i in range(len(xs)):
+        tmp_A.append([xs[i], ys[i], 1])
+        tmp_b.append(zs[i])
+    b = np.matrix(tmp_b).T
+    A = np.matrix(tmp_A)
+
+    # Manual solution
+    fit = (A.T * A).I * A.T * b  #该式由最小二乘法推导得出
+    errors = b - A * fit #计算估计值与真实值的误差
+    residual = np.linalg.norm(errors)  #求误差矩阵的范数，即残差平方和SSE
+    error_withmean = np.mean(b)- A * fit #计算估计值与平均值的误差
+    regression = np.linalg.norm(error_withmean)  #求回归误差矩阵的范数，即回归平方和SSR
+    SST=residual+regression
+    R2=1-(residual/SST)
+
+    print("solution: %f x + %f y + %f = z" % (fit[0], fit[1], fit[2]))
+    print("residual:" ,residual)
+    print("R2:" ,R2)
+
+    # plot plane
+    xlim = ax.get_xlim()
+    ylim = ax.get_ylim()
+    X,Y = np.meshgrid(np.arange(xlim[0], xlim[1]),
+                    np.arange(ylim[0], ylim[1]))
+    Z = np.zeros(X.shape)
+    for r in range(X.shape[0]):
+        for c in range(X.shape[1]):
+            Z[r,c] = fit[0] * X[r,c] + fit[1] * Y[r,c] + fit[2]
+    ax.plot_surface(X,Y,Z, color=color_name,alpha=0.5)
+    normal_v=np.array([fit[0,0], fit[1,0], fit[2,0]])
+    return normal_v
 
 def interval_cuttage(marker):
     run_during=np.array([])
@@ -462,8 +393,6 @@ def main(neurons,marker):
         data_norm=normalize_fr(data)
         data2pca=data_norm.T
         '''
-        ### manifold 1d
-        oneDdynamic(data2pca,0.1,region_name)
         ### manifold surface
         data2pca=data.T
         redu_dim_data=reduce_dimension(data2pca,0.1,region_name,stage='all_session')
@@ -472,20 +401,9 @@ def main(neurons,marker):
         ### manifold each trail
         data2pca_each_trail=data.T
         redu_dim_data=reduce_dimension(data2pca_each_trail,0.1,region_name,stage='all_session')
-        manifold_fixed_colored_intervals(redu_dim_data,marker,int(time_len),region_name,redu_method='PCA')  #fixed & colored intervals
         # ISOMAP extract nolinear structure
         redu_dim_data_ISOMAP=reduce_dimension_ISOMAP(data2pca_each_trail,0.1,region_name,stage='all_session')
-        manifold_fixed_colored_intervals(redu_dim_data_ISOMAP,marker,int(time_len),region_name,redu_method='ISOMAP')  #fixed & colored intervals
-        
-        #### manifold 动态图
-        '''
-        marker_start = marker['time_interval_left_end'].iloc[0]
-        marker_end = marker['time_interval_right_end'].iloc[-1]
-        data,time_len = population_spikecounts(neuron_id,marker_start,marker_end,30,bin)
-        data2pca_each_trail=data.T
-        redu_dim_data_ISOMAP=reduce_dimension_ISOMAP(data2pca_each_trail,0.1,region_name,stage='all_session')
-        manifold_dynamic_colored_intervals(redu_dim_data_ISOMAP,marker,bin,int(time_len),region_name,redu_method='ISOMAP')
-        '''
+    
         ### manifold trial average
         run_time_dura,stop_time_dura=interval_cuttage(marker)
         run_average,stop_average=trail_average(data,run_time_dura,stop_time_dura)

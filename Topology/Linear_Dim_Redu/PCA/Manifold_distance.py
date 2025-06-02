@@ -147,7 +147,7 @@ def manifold_center_distance(data,marker,region_name):
     ax.set_zlabel('PC3')
     ax.legend()
     #plt.show()
-    plt.savefig(save_path+f"/run_stop_center_manifold_{region_name}.png",dpi=600,bbox_inches = 'tight')
+    plt.savefig(save_path+f"/run_stop_center_{region_name}.png",dpi=600,bbox_inches = 'tight')
     '''
     return high_dist,three_dist
 
@@ -188,6 +188,6 @@ def main_function(neurons,marker):
     # manifold_distance
     manifold_dist = {'region': neurons.columns.values, 'high_dim_dist': high_dim_dist_all,'three_dim_dist': three_dim_dist_all}
     df = pd.DataFrame(manifold_dist)
-    df.to_csv(save_path+f"/manifold_run_stop_distance.csv", index=False)
+    df.to_csv(save_path+f"/run_stop_distance.csv", index=False)
 
-main_function(neurons,treadmill)
+main_function(neurons,Marker)

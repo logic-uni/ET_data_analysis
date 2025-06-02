@@ -18,18 +18,20 @@ from scipy.ndimage import gaussian_filter
 import cupyx.scipy.signal as signal
 np.set_printoptions(threshold=np.inf)
 
+# ------- NEED CHANGE -------
 data_path = "/data1/zhangyuhao/xinchao_data/NP2/test/control/Mice_1411_3/20250109_control_Mice_1411_3_VN_head_fixation"
 save_path = "/home/zhangyuhao/Desktop/Result/ET/Motion_FFT/NP2/test/control/Mice_1411_3/20250109_control_Mice_1411_3_VN_head_fixation"
-fs = 10593.2
-marker = pd.read_csv(data_path + "/Marker/static_motion_segement.csv")
-motion_data = np.load(data_path + "/Marker/motion_marker.npy")
-motion_data = motion_data[0]
-print(marker)
 freq_low, freq_high = 0.5, 30
 start_time = 438
 end_time = 439.6 #marker["time_interval_right_end"].iloc[-1]
 
-# ------- FUNCTIONS -------
+# ------- NO NEED CHANGE -------
+fs = 10593.2
+marker = pd.read_csv(data_path + "/Behavior/marker.csv")
+motion_data = np.load(data_path + "/Behavior/motion.npy")
+motion_data = motion_data[0]
+print(marker)
+
 #注意以下使用的函数 np.fft.fftfreq 中，1/fs表示相邻样本之间的时间间隔,因此fs必须是实际数据真实的采样率
 def stft_cupy(data, state, start, end):
     # --- 输入校验 ---
@@ -60,7 +62,6 @@ def stft_cupy(data, state, start, end):
         nfft=nfft,
         boundary="even"
     )
-    
     # --- PSD计算 ---
     '''
     S1 = cp.sum(window**2)

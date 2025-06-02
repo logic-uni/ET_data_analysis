@@ -1,270 +1,94 @@
 """
 # coding: utf-8
 @author: Yuhao Zhang
-last updated: 06/26/2024
+last updated: 05/31/2025
 data from: Xinchao Chen
 """
-import torch
 import numpy as np
 import pandas as pd
-import pynapple as nap
-import pynacollada as pyna
 import matplotlib.pyplot as plt
-import matplotlib.animation as animation
-import seaborn as sns 
-import networkx as nx
-from matplotlib.animation import FuncAnimation, PillowWriter 
-import csv
-import os
-from itertools import count
+import seaborn as sns
+import neo
+import quantities as pq
+from matplotlib.animation import FuncAnimation
 from sklearn.metrics import pairwise_distances
-from sklearn.manifold import TSNE
 from sklearn.manifold import Isomap
-from sklearn.datasets import load_iris,load_digits
 from sklearn.decomposition import PCA
 from sklearn.linear_model import LinearRegression
-from matplotlib.colors import hsv_to_rgb
 from matplotlib import cm
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-from math import log
-from sklearn.mixture import GaussianMixture
-from mpl_toolkits.mplot3d import Axes3D
 from scipy import interpolate
-from scipy.stats import norm
-from scipy.signal import savgol_filter
-import warnings
-import scipy.io as sio
-np.set_printoptions(threshold=np.inf)
-from mpl_toolkits.mplot3d import Axes3D
 from scipy.interpolate import interp1d
-from mayavi import mlab
+from elephant.conversion import BinnedSpikeTrain
+np.set_printoptions(threshold=np.inf)
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-mice = '20230623-condictional tremor4'
-fig_save_path = r'C:\Users\zyh20\Desktop\ET_data analysis\manifold\20230623-condictional tremor4'
-dis_save_path = r'C:\Users\zyh20\Desktop\ET_data analysis\manifold\runstop_center_distance'
-### marker
-treadmill_marker_path = r'E:\chaoge\sorted neuropixels data\20230623-condictional tremor4\202300622_Syt2_512_2_Day18_P79_g0'
-treadmill = pd.read_csv(treadmill_marker_path+'/treadmill_move_stop_velocity.csv',index_col=0)
-print(treadmill)
+# ------- NEED CHANGE -------
+data_path = '/data2/zhangyuhao/xinchao_data/Givenme/1423_15_control-Day1-1CVC-FM_g0'
+save_path = '/home/zhangyuhao/Desktop/Result/ET/Manifold/NP2/givenme/1423_15_control-Day1-1CVC-FM_g0'
+# ------- NO NEED CHANGE -------
+### Behavior
+Marker = pd.read_csv(data_path+'/Behavior/marker.csv')
+print(Marker)
+### Electrophysiology
+fs = 30000  # spikeGLX neuropixel sample rate
 
-### electrophysiology
-sample_rate=30000 #spikeGLX neuropixel sample rate
-file_directory=r'E:\chaoge\sorted neuropixels data\20230623-condictional tremor4\202300622_Syt2_512_2_Day18_P79_g0\202300622_Syt2_512_2_Day18_P79_g0_imec0'
-identities = np.load(file_directory+'/spike_clusters.npy') #存储neuron的编号id,对应phy中的第一列id
-times = np.load(file_directory+'/spike_times.npy')  #
-channel = np.load(file_directory+'/channel_positions.npy')
-neurons = pd.read_csv(file_directory+'/region_neuron_id.csv', low_memory = False,index_col=0)#防止弹出警告
+identities = np.load(data_path+'/Sorted/kilosort4/spike_clusters.npy') # time series: unit id of each spike
+times = np.load(data_path+'/Sorted/kilosort4/spike_times.npy')  # time series: spike time of each spike
+neurons = pd.read_csv(data_path+'/Sorted/kilosort4/mapping_artifi.csv')
 print(neurons)
-print("检查treadmill总时长和电生理总时长是否一致")
-print("电生理总时长")
-print((times[-1]/sample_rate)[0])
-print("跑步机总时长") 
-print(treadmill['time_interval_right_end'].iloc[-1])
 
-#### spike train & firing rates
+# 按region分组，提取每组的第一列cluster_id
+region_groups = neurons.groupby('region')
+region_cluster_ids = {}
+for region, group in region_groups:
+    # 提取每组的第一列（cluster_id），去除缺失值
+    cluster_ids = group.iloc[:, 0].dropna().astype(int).values
+    region_cluster_ids[region] = cluster_ids
 
-# get single neuron spike train
+print("Test if Ephys duration same as motion duration...")
+print(f"Ephys duration: {(times[-1]/fs)} s")  # for NP1, there's [0] after times[-1]/fs
+print(f"motion duration: {Marker['time_interval_right_end'].iloc[-1]} s")
+neuron_num = neurons.count().transpose().values
+
 def singleneuron_spiketimes(id):
     x = np.where(identities == id)
     y=x[0]
+    #y = np.where(np.isin(identities, id))[0]
     spike_times=np.empty(len(y))
     for i in range(0,len(y)):
         z=y[i]
-        spike_times[i]=times[z]/sample_rate
+        spike_times[i]=times[z]/fs
     return spike_times
 
-# +-2 nuerons around selected id
-def neurons_spiketrain(id):
-    x = np.where(identities == id)
-    y=x[0]
-    spike_times=np.empty((6,len(y)))
-    for m in range(-2,2):
-        x = np.where(identities == id+m)
-        y=x[0]
-        for i in range(0,len(y)):
-            z=y[i]
-            spike_times[m,i]=times[z]/sample_rate
-    return spike_times
-
-
-#split spike times into trials, now is the +-0.5s of start pushing the rod
-def Trials_spiketrain(spike_times,marker):
-    for i in range(len(marker)):
-        Trials_spiketrain=np.array([])
-        
-        for j in range(len(spike_times)):
-            if marker[i,0]<spike_times[j] and spike_times[j]<marker[i,1]:
-                Trials_spiketrain=np.append(Trials_spiketrain,spike_times[j])
-        if Trials_spiketrain.size != 0:
-            for k in range(1,len(Trials_spiketrain)):
-                Trials_spiketrain[k]=Trials_spiketrain[k]-Trials_spiketrain[0]
-            Trials_spiketrain[0]=0
-        y=np.full((len(Trials_spiketrain),1),i)      
-        plt.plot(Trials_spiketrain,y, '|', color='gray') 
-
-    plt.title('neuron') 
-    plt.xlabel("time") 
-    plt.xlim(0,1)
-    plt.ylim(-2,len(marker)+5)
-    plt.show()
-
-# spike counts
-def build_time_window_domain(bin_edges, offsets, callback=None):
-    callback = (lambda x: x) if callback is None else callback
-    domain = np.tile(bin_edges[None, :], (len(offsets), 1))
-    domain += offsets[:, None]
-    return callback(domain)
-
-def build_spike_histogram(time_domain,
-                          spike_times,
-                          dtype=None,
-                          binarize=False):
-
-    time_domain = np.array(time_domain)
-
-    tiled_data = np.zeros(
-        (time_domain.shape[0], time_domain.shape[1] - 1),
-        dtype=(np.uint8 if binarize else np.uint16) if dtype is None else dtype
-    )
-
-    starts = time_domain[:, :-1]
-    ends = time_domain[:, 1:]
-
-    data = np.array(spike_times)
-
-    start_positions = np.searchsorted(data, starts.flat)
-    end_positions = np.searchsorted(data, ends.flat, side="right")
-    counts = (end_positions - start_positions)
-
-    tiled_data[:, :].flat = counts > 0 if binarize else counts
-
-    return tiled_data
-
-def spike_counts(
-    spike_times,
-    bin_edges,
-    movement_start_time,
-    binarize=False,
-    dtype=None,
-    large_bin_size_threshold=0.001,
-    time_domain_callback=None
-):
-
-    #build time domain
-    bin_edges = np.array(bin_edges)
-    domain = build_time_window_domain(
-        bin_edges,
-        movement_start_time,
-        callback=time_domain_callback)
-
-    out_of_order = np.where(np.diff(domain, axis=1) < 0)
-    if len(out_of_order[0]) > 0:
-        out_of_order_time_bins = \
-            [(row, col) for row, col in zip(out_of_order)]
-        raise ValueError("The time domain specified contains out-of-order "
-                            f"bin edges at indices: {out_of_order_time_bins}")
-
-    ends = domain[:, -1]
-    starts = domain[:, 0]
-    time_diffs = starts[1:] - ends[:-1]
-    overlapping = np.where(time_diffs < 0)[0]
-
-    if len(overlapping) > 0:
-        # Ignoring intervals that overlaps multiple time bins because
-        # trying to figure that out would take O(n)
-        overlapping = [(s, s + 1) for s in overlapping]
-        warnings.warn("You've specified some overlapping time intervals "
-                        f"between neighboring rows: {overlapping}, "
-                        "with a maximum overlap of"
-                        f" {np.abs(np.min(time_diffs))} seconds.")
-        
-    #build_spike_histogram
-    tiled_data = build_spike_histogram(
-        domain,
-        spike_times,
-        dtype=dtype,
-        binarize=binarize
-    )
-    return tiled_data
-
-def binary_spiketrain(id,marker):  #each trial
-    # bin
-    bin_width = 0.0007
-    duration = 5  #一个trial的时间，或你关注的时间段的长度
-    pre_time = -0.1
-    post_time = duration
-    bins = np.arange(pre_time, post_time+bin_width, bin_width)   
-
-    histograms=spike_counts(
-        singleneuron_spiketimes(id),
-        bin_edges=bins,
-        movement_start_time=marker,
-        )
-    print(histograms)
-
-    return histograms
-
-def eachtrial_average_firingrate(histograms,bin_width):
-    firing_rate=histograms.mean(1)/bin_width
-    print(firing_rate)
-    sio.savemat('/firing_rate/20230414/fir_%d.mat'%id, {'fir_%d'%id:firing_rate}) #存成matlab格式，方便后续辨识传递函数
-
-    return firing_rate
-
-def firingrate_time(id,marker,duration,bin_width):
-    # bin
-    pre_time = 0
-    post_time = duration
-    bins = np.arange(pre_time, post_time+bin_width,bin_width)  # bin_width默认 0.14
-    # histograms
-    histograms=spike_counts(
-        singleneuron_spiketimes(id),
-        bin_edges=bins,
-        movement_start_time=marker,
-        )
-    return histograms
-
-def firingrate_shortime(id,marker):
-    # bin
-    bin_width = 0.05
-    duration = 0.5   #一个trial的时间，或你关注的时间段的长度
-    pre_time = -0.3
-    post_time = duration
-    bins = np.arange(pre_time, post_time+bin_width, bin_width)  
-    # histograms
-    histograms=spike_counts(
-        singleneuron_spiketimes(id),
-        bin_edges=bins,
-        movement_start_time=marker,
-        )
-    print(histograms)
-    return histograms
-
-def population_spikecounts(neuron_id,marker_start,marker_end,Artificial_time_division,bin):  
-    #这里由于allen的spike counts函数是针对视觉的，因此对trial做了划分，必要trialmarker作为参数，因此这里分假trial，再合并
-    #Artificial_time_division是把整个session人为划分为一个个时间段trial
-    #bin是对firing rate的滑窗大小，单位s
-    marker=np.array(range(int(marker_start),int(marker_end)-int(marker_end)%Artificial_time_division,Artificial_time_division))
-    #get a 2D matrix with neurons, trials(trials contain times), trials and times are in the same dimension
-    for j in range(len(neuron_id)): #第j个neuron
-        #每个neuron的tials水平append
-        for i in range(len(marker)):
-            if i == 0:
-                one_neruon = firingrate_time(neuron_id[j],marker,Artificial_time_division,bin)[0]
-            else:
-                trail = firingrate_time(neuron_id[j],marker,Artificial_time_division,bin)[i]
-                one_neruon = np.append(one_neruon, trail)
+def popu_fr_onetrial(neuron_ids,marker_start,marker_end,fr_bin):   
+    for j in range(len(neuron_ids)): #第j个neuron
+        spike_times = singleneuron_spiketimes(neuron_ids[j])
+        spike_times_trail = spike_times[(spike_times > marker_start) & (spike_times < marker_end)]
+        spiketrain = neo.SpikeTrain(spike_times_trail,units='sec',t_start=marker_start, t_stop=marker_end)
+        fr = BinnedSpikeTrain(spiketrain, bin_size=fr_bin*pq.ms,tolerance=None)
+        one_neruon = fr.to_array().astype(int)[0]
         if j == 0:
             neurons = one_neruon
         else:
             neurons = np.vstack((neurons, one_neruon))
-    '''
-    print(neurons)
-    print(neurons.shape)
-    '''
-    time_len=(int(marker_end)-int(marker_end)%Artificial_time_division)/bin
-    return neurons,time_len
+    return neurons
+
+def reduce_dimension(count,bin_size,region_name,n_components): # 默认: 0.1 感觉改bin_size影响不大，改firing rate的bin size影响较大
+    #smooth data
+    count = pd.DataFrame(count)
+    rate = np.sqrt(count/bin_size)
+    #对数据做均值  默认: window=50  min_periods=1  感觉改这些值影响不大，改firing的bin size影响较大
+    rate = rate.rolling(window=50,win_type='gaussian',center=True,min_periods=1, axis = 0).mean(std=2) 
+    #reduce dimension
+    
+    pca = PCA(n_components)
+    X_pca = pca.fit_transform(rate.values)   #对应的是Explained variance
+    explained_variance_ratio = pca.explained_variance_ratio_   #每个主成分所解释的方差比例
+    explained_variance_sum = np.cumsum(explained_variance_ratio)  #计算累积解释方差比例
+    
+    #X_isomap = Isomap(n_components = 3, n_neighbors = 21).fit_transform(rate.values)  #对应的是Residual variance
+    #X_tsne = TSNE(n_components=3,random_state=21,perplexity=20).fit_transform(rate.values)  #t-SNE没有Explained variance，t-SNE 旨在保留局部结构而不是全局方差
+    return X_pca
+
 
 ### manifold
 def adjust_array(arr):
@@ -274,7 +98,7 @@ def adjust_array(arr):
         arr = [x + diff for x in arr]
     return np.array(arr)
 
-def reduce_dimension_to1(count,bin_size,region_name): # 默认: 0.1 感觉改bin_size影响不大，改firing rate的bin size影响较大
+def oneDdynamic(count,bin_size,region_name): # 默认: 0.1 感觉改bin_size影响不大，改firing rate的bin size影响较大
     #smooth data
     count = pd.DataFrame(count)
     rate = np.sqrt(count/bin_size)
@@ -320,7 +144,7 @@ def reduce_dimension_to1(count,bin_size,region_name): # 默认: 0.1 感觉改bin
     # 创建动画
     ani = FuncAnimation(fig, update, frames=len(x), interval=20, blit=True)
     # 使用imagemagick将动画保存为GIF图片
-    ani.save(fig_save_path+f"/1Ddynamic/{region_name}_dynamic_raw.gif", writer='pillow')
+    ani.save(save_path+f"/1Ddynamic_{region_name}_dynamic_raw.gif", writer='pillow')
 
     ### y=x^2 李雅普诺夫能量函数
     # 小球距离曲线的偏移量
@@ -349,7 +173,7 @@ def reduce_dimension_to1(count,bin_size,region_name): # 默认: 0.1 感觉改bin
     # 创建动画
     ani = FuncAnimation(fig, update, frames=len(x), interval=20, blit=True)
     # 使用imagemagick将动画保存为GIF图片
-    ani.save(fig_save_path+f"/1Ddynamic/{region_name}_dynamic_x^2.gif", writer='pillow')
+    ani.save(save_path+f"/1Ddynamic_{region_name}_dynamic_x^2.gif", writer='pillow')
 
 def reduce_dimension(count,bin_size,region_name,stage): # 默认: 0.1 感觉改bin_size影响不大，改firing rate的bin size影响较大
     #smooth data
@@ -373,7 +197,7 @@ def reduce_dimension(count,bin_size,region_name,stage): # 默认: 0.1 感觉改b
     plt.ylabel('Value')
     plt.legend()
     #plt.show()
-    plt.savefig(fig_save_path+f"/{region_name}_{stage}_PC_explained variance ratio.png",dpi=600,bbox_inches = 'tight')
+    plt.savefig(save_path+f"/{region_name}_{stage}_PC_explained variance ratio.png",dpi=600,bbox_inches = 'tight')
     X_isomap = Isomap(n_components = 3, n_neighbors = 21).fit_transform(rate.values)  #对应的是Residual variance
     #X_tsne = TSNE(n_components=3,random_state=21,perplexity=20).fit_transform(rate.values)  #t-SNE没有Explained variance，t-SNE 旨在保留局部结构而不是全局方差
     return X_isomap
@@ -403,13 +227,13 @@ def reduce_dimension_ISOMAP(count,bin_size,region_name,stage): # 默认: 0.1 感
     plt.ylabel('Residual Variance')
     plt.title(f"{region_name}_{stage}_Isomap Residual Variance")
     #plt.show()
-    plt.savefig(fig_save_path+f"/{region_name}_{stage}_Isomap Residual Variance.png",dpi=600,bbox_inches = 'tight')
+    plt.savefig(save_path+f"/{region_name}_{stage}_Isomap Residual Variance.png",dpi=600,bbox_inches = 'tight')
 
     return X_isomap
 
-def manifold_fixed_colored_intervals(redu_dim_data,marker,bin,time_len_int_aft_bin,region_name,redu_method):  #静态流形，时间区间颜色标记
-    colors = ['#ffcccc', '#ff6666', '#ff3333', '#cc0000'] #从浅红到深红的颜色列表，用于不同速度挡位画图区分
-    velocity_level=np.array(marker['velocity_level'][1::2])
+def manifold_fixed_colored_intervals(redu_dim_data,marker,time_len_int_aft_bin,region_name,redu_method):  #静态流形，时间区间颜色标记
+    #colors = ['#ffcccc', '#ff6666', '#ff3333', '#cc0000'] #从浅红到深红的颜色列表，用于不同速度挡位画图区分
+    #velocity_level=np.array(marker['velocity_level'][1::2])
     #分别单独画前三个PC
     for a in range(0,3):
         q=0 # q控制颜色
@@ -420,14 +244,15 @@ def manifold_fixed_colored_intervals(redu_dim_data,marker,bin,time_len_int_aft_b
             x_run=np.arange(left-2,right+2)
             x_stop=np.arange(left,right)
             if marker['run_or_stop'].iloc[i] == 1:
-                plt.plot(x_run,redu_dim_data[left-2:right+2,a],color=colors[int(velocity_level[q])])
+                #plt.plot(x_run,redu_dim_data[left-2:right+2,a],color=colors[int(velocity_level[q])])
+                plt.plot(x_run,redu_dim_data[left-2:right+2,a],color='r')
                 q=q+1
             else:
                 plt.plot(x_stop,redu_dim_data[left:right,a],color='blue')
         plt.title(f"{region_name}_{redu_method}_manifold_colored_intervals_PC{a+1}")
         plt.xlabel("t")
         #plt.show()
-        plt.savefig(fig_save_path+f"/{region_name}_{redu_method}_manifold_colored_intervals_PC{a+1}.png",dpi=600,bbox_inches = 'tight')
+        plt.savefig(save_path+f"/{region_name}_{redu_method}_manifold_colored_intervals_PC{a+1}.png",dpi=600,bbox_inches = 'tight')
 
     #画三维manifold
     p=0 # p控制颜色
@@ -441,7 +266,8 @@ def manifold_fixed_colored_intervals(redu_dim_data,marker,bin,time_len_int_aft_b
         left=int(marker['time_interval_left_end'].iloc[i]/bin)
         right=int(marker['time_interval_right_end'].iloc[i]/bin)
         if marker['run_or_stop'].iloc[i] == 1:
-            ax.plot3D(redu_dim_data[left-2:right+2,0],redu_dim_data[left-2:right+2,1],redu_dim_data[left-2:right+2,2],colors[int(velocity_level[p])])
+            #ax.plot3D(redu_dim_data[left-2:right+2,0],redu_dim_data[left-2:right+2,1],redu_dim_data[left-2:right+2,2],colors[int(velocity_level[p])])
+            ax.plot3D(redu_dim_data[left-2:right+2,0],redu_dim_data[left-2:right+2,1],redu_dim_data[left-2:right+2,2],'r')
             p=p+1
         else:
             ax.plot3D(redu_dim_data[left:right,0],redu_dim_data[left:right,1],redu_dim_data[left:right,2],'blue')
@@ -449,11 +275,9 @@ def manifold_fixed_colored_intervals(redu_dim_data,marker,bin,time_len_int_aft_b
     ax.plot3D(redu_dim_data[end_inter_start:time_len_int_aft_bin,0],redu_dim_data[end_inter_start:time_len_int_aft_bin,1],redu_dim_data[end_inter_start:time_len_int_aft_bin,2],'blue')
 
     #plt.show()
-    plt.savefig(fig_save_path+f"/{region_name}_{redu_method}_manifold_colored_intervals.png",dpi=600,bbox_inches = 'tight')
+    plt.savefig(save_path+f"/{region_name}_{redu_method}_manifold_colored_intervals.png",dpi=600,bbox_inches = 'tight')
 
-    
-
-def manifold_dynamic_colored_intervals(redu_dim_data,marker,bin,time_len_int_aft_bin,region_name,redu_method):  #动态流形，时间区间颜色标记
+def manifold_dynamic_colored_intervals(redu_dim_data,marker,time_len_int_aft_bin,region_name,redu_method):  #动态流形，时间区间颜色标记
     p=0 # p控制颜色
     colors = ['#ffcccc', '#ff6666', '#ff3333', '#cc0000'] #从浅红到深红的颜色列表，用于不同速度挡位画图区分
     velocity_level=np.array(marker['velocity_level'][1::2])
@@ -488,7 +312,7 @@ def manifold_fixed(redu_dim_data,stage,region_name):  #静态流形，无时间�
         plt.title(f"{region_name}_{stage}_manifold_trail_average_PC{i+1}")
         plt.xlabel("t")
         #plt.show()
-        plt.savefig(fig_save_path+f"/{region_name}_{stage}_PC{i+1}_manifold_trail_average.png",dpi=600,bbox_inches = 'tight')
+        plt.savefig(save_path+f"/{region_name}_{stage}_PC{i+1}_manifold_trail_average.png",dpi=600,bbox_inches = 'tight')
     #画三维manifold
     fig = plt.figure()
     ax = fig.add_subplot(projection = '3d')
@@ -497,12 +321,12 @@ def manifold_fixed(redu_dim_data,stage,region_name):  #静态流形，无时间�
     ax.set_xlabel("PC1")
     ax.set_ylabel("PC2")
     ax.set_zlabel("PC3")
-    plt.savefig(fig_save_path+f"/{region_name}_{stage}_manifold_trail_average.png",dpi=600,bbox_inches = 'tight')
+    plt.savefig(save_path+f"/{region_name}_{stage}_manifold_trail_average.png",dpi=600,bbox_inches = 'tight')
     
 
 def manifold_dynamic(redu_dim_data,stage):  #静态流形，无时间区间颜色标记，用于trial_average，只需输入降维后的，无需marker
     fig = plt.figure()
-    ax =  fig.add_subplot(projection = '3d')
+    ax = fig.add_subplot(projection = '3d')
     ax.set_title(f"Essential Tremor Manifold, {stage}")
     ax.set_xlabel("PC1")
     ax.set_ylabel("PC2")
@@ -514,7 +338,7 @@ def manifold_dynamic(redu_dim_data,stage):  #静态流形，无时间区间颜�
         plt.pause(0.01)
 
 '''
-def manifold_fixed_colored_intervals(X_isomap,marker,bin,time_len_int_aft_bin): 
+def manifold_fixed_colored_intervals(X_isomap,marker,time_len_int_aft_bin): 
     colors=[None] * time_len_int_aft_bin
     for i in range(0,len(marker['run_or_stop'])-1):
         t_left_withbin=int(marker['time_interval_left_end'].iloc[i]/bin)
@@ -529,80 +353,6 @@ def manifold_fixed_colored_intervals(X_isomap,marker,bin,time_len_int_aft_bin):
     print(len(colors))
     manifold_fixed(X_isomap,colors)
 '''
-
-def splicing_neural_data(time,data):
-    phy = np.zeros((1, 3))
-    for i in range(0,time.shape[0]):
-        left=int(time[i][0])
-        right=int(time[i][1])
-        temp=np.array([data[left:right,0],data[left:right,1],data[left:right,2]]).T
-        if i == 0:
-            phy = temp
-        else:
-            phy=np.concatenate((phy, temp), axis=0)
-    return phy
-
-def splicing_neural_data_high_dim(time,data):
-    for i in range(0,time.shape[0]):
-        left=int(time[i][0])
-        right=int(time[i][1])
-        temp=data[:,left:right]
-        if i == 0:
-            phy = temp
-        else:
-            phy=np.hstack((phy, temp))
-    return phy
-
-def manifold_center_distance(data,marker,region_name):
-    data2pca=data.T
-    redu_dim_data=reduce_dimension(data2pca,0.1,region_name,stage='all_session')
-    run = marker[marker['run_or_stop'] == 1]
-    stop = marker[marker['run_or_stop'] == 0]
-    run_time = np.array([run['time_interval_left_end'],run['time_interval_right_end']]).T
-    stop_time = np.array([stop['time_interval_left_end'],stop['time_interval_right_end']]).T
-    run_reduc_di_phy = splicing_neural_data(run_time,redu_dim_data)
-    stop_reduc_di_phy = splicing_neural_data(stop_time,redu_dim_data)
-    run_phy = splicing_neural_data_high_dim(run_time,data)
-    stop_phy = splicing_neural_data_high_dim(stop_time,data)
-    
-    # 计算运动簇的中心
-    center_run_higdim = np.mean(run_phy.T, axis=0)
-    center_run_3d = np.mean(run_reduc_di_phy, axis=0)
-    # 计算静止簇的中心
-    center_stop_higdim = np.mean(stop_phy.T, axis=0)
-    center_stop_3d = np.mean(stop_reduc_di_phy, axis=0)
-    # 计算两个中心之间的距离
-    high_dist = np.linalg.norm(center_run_higdim - center_stop_higdim)  #高维空间点的二范数，欧式距离
-    three_dist = np.linalg.norm(center_run_3d - center_stop_3d) #低维空间点的二范数，欧式距离
-    '''
-    #plot 3d scatter
-    fig = plt.figure()
-    ax = plt.subplot(projection = '3d')
-    # 绘制簇的中心点
-    ax.scatter(run_reduc_di_phy[:,0],run_reduc_di_phy[:,1],run_reduc_di_phy[:,2], c='gold',alpha = 0.5, zorder=2)
-    ax.scatter(stop_reduc_di_phy[:,0],stop_reduc_di_phy[:,1],stop_reduc_di_phy[:,2], c='green',alpha = 0.5, zorder=2)
-    
-    ax.scatter(center_run_3d[0], center_run_3d[1], center_run_3d[2], c='red',  s=150, label='run', zorder=1)
-    ax.scatter(center_stop_3d[0], center_stop_3d[1], center_stop_3d[2], c='blue',  s=150, label='stop', zorder=1)
-    # 计算中心点的方位角，为了朝向中心点呈现
-    x_origin, y_origin, z_origin = center_stop_3d[0], center_stop_3d[1], center_stop_3d[2]
-    x_target, y_target, z_target = center_run_3d[0], center_run_3d[1], center_run_3d[2]
-    azim = np.arctan2(y_target - y_origin, x_target - x_origin)
-    azim = np.degrees(azim)  # 转换为度
-    # 计算仰角
-    elev = np.arccos(z_target / np.sqrt((x_target - x_origin)**2 + (y_target - y_origin)**2 + z_target**2))
-    elev = np.degrees(elev)  # 转换为度
-    ax.view_init(elev=elev, azim=azim % 360)  # 确保方位角在0到360度之间
-    # 设置图形标题和标签
-    ax.set_title(f'{region_name}')
-    ax.set_xlabel('PC1')
-    ax.set_ylabel('PC2')
-    ax.set_zlabel('PC3')
-    ax.legend()
-    #plt.show()
-    plt.savefig(fig_save_path+f"/run and stop center of neural manifold_{region_name}.png",dpi=600,bbox_inches = 'tight')
-    '''
-    return high_dist,three_dist
 
 def plot_hyper_plane(X, y,X_pca):
     # 使用线性回归拟合超平面
@@ -678,34 +428,6 @@ def manifold_fitplane(X_isomap):
 
     plt.show()
     return X_isomap
-
-def plot_surface(x,y,z,region_name):
-    x_grid, y_grid = np.meshgrid(x, y)
-    z_grid = np.empty((len(x),len(y))) 
-    for i in range(len(x)):
-        z_grid[i][i] = z[i]
-    s = mlab.mesh(x_grid, y_grid, z_grid
-                  )
-    mlab.show()
-    '''
-    x = savgol_filter(x, window_length=5, polyorder=3)
-    y = savgol_filter(y, window_length=5, polyorder=3)
-    z = savgol_filter(z, window_length=5, polyorder=3)
-
-
-    # 创建一个新的图像
-    fig = plt.figure()
-    # 创建一个3D绘图区域
-    ax = fig.add_subplot(111, projection='3d')
-    # 绘制三维曲面图
-    ax.plot_surface(x_grid, y_grid, z_grid, rstride = 15, cstride = 15,cmap = plt.get_cmap('rainbow'), alpha=None, antialiased=True)
-    # 设置标签
-    ax.set_title(f"manifold_surface_{region_name}")
-    ax.set_xlabel("PC1")
-    ax.set_ylabel("PC2")
-    ax.set_zlabel("PC3")
-    plt.savefig(fig_save_path+f"/manifold_surface_{region_name}.png",dpi=600,bbox_inches = 'tight')
-    '''
 
 def plot_surface_2(x,y,z):
     f = interpolate.interp2d(x, y, z, kind='cubic')
@@ -877,48 +599,42 @@ def normalize_fr(data2dis):
     normalized_data = (data2dis - data2dis.min(axis=1, keepdims=True)) / (data2dis.max(axis=1, keepdims=True) - data2dis.min(axis=1, keepdims=True))
     return normalized_data
 
-def main_function(neurons,marker):
-    high_dim_dist_all = []
-    three_dim_dist_all = []
-    for i in range(neurons.shape[1]):  #遍历所有的脑区
-        bin=1
-        region_name = neurons.columns.values[i]
-        
-        neuron_id = np.array(neurons.iloc[:, i].dropna()).astype(int)  #提取其中一个脑区的neuron id
+def main(neurons,marker):
+    for region_name, neuron_id in region_cluster_ids.items():  # 遍历所有的脑区及其对应的neuron id
+
+        print(f"Region: {region_name} ")
+        print(f"Neuron IDs: {neuron_id}")
         marker_start = marker['time_interval_left_end'].iloc[0]
         marker_end = marker['time_interval_right_end'].iloc[-1]
-        
-        '''
-        ### manifold 1PC
-        data,time_len = population_spikecounts(neuron_id,marker_start,marker_end,30,bin)
+
+        data,time_len = population_spikecounts(neuron_id,marker_start,marker_end,30)
         data_norm=normalize_fr(data)
         data2pca=data_norm.T
-        reduce_dimension_to1(data2pca,0.1,region_name)
-        
+        '''
+        ### manifold 1d
+        oneDdynamic(data2pca,0.1,region_name)
         ### manifold surface
         data2pca=data.T
         redu_dim_data=reduce_dimension(data2pca,0.1,region_name,stage='all_session')
-        #plot_surface_2(redu_dim_data[:,0],redu_dim_data[:,1],redu_dim_data[:,2])
-        plot_surface(redu_dim_data[:,1],redu_dim_data[:,2],redu_dim_data[:,0],region_name)  #PC2=x,PC3=y,PC1=z
-        
+        plot_surface_2(redu_dim_data[:,0],redu_dim_data[:,1],redu_dim_data[:,2])
+        '''
         ### manifold each trail
         data2pca_each_trail=data.T
         redu_dim_data=reduce_dimension(data2pca_each_trail,0.1,region_name,stage='all_session')
-        manifold_fixed_colored_intervals(redu_dim_data,marker,bin,int(time_len),region_name,redu_method='PCA')  #fixed & colored intervals
+        manifold_fixed_colored_intervals(redu_dim_data,marker,int(time_len),region_name,redu_method='PCA')  #fixed & colored intervals
         # ISOMAP extract nolinear structure
         redu_dim_data_ISOMAP=reduce_dimension_ISOMAP(data2pca_each_trail,0.1,region_name,stage='all_session')
-        manifold_fixed_colored_intervals(redu_dim_data_ISOMAP,marker,bin,int(time_len),region_name,redu_method='ISOMAP')  #fixed & colored intervals
+        manifold_fixed_colored_intervals(redu_dim_data_ISOMAP,marker,int(time_len),region_name,redu_method='ISOMAP')  #fixed & colored intervals
         
         #### manifold 动态图
-        if region_name == 'Superior vestibular nucleus':
-            neuron_id = np.array(neurons.iloc[:, i].dropna()).astype(int)  #提取其中一个脑区的neuron id
-            marker_start = marker['time_interval_left_end'].iloc[0]
-            marker_end = marker['time_interval_right_end'].iloc[-1]
-            data,time_len = population_spikecounts(neuron_id,marker_start,marker_end,30,bin)
-            data2pca_each_trail=data.T
-            redu_dim_data_ISOMAP=reduce_dimension_ISOMAP(data2pca_each_trail,0.1,region_name,stage='all_session')
-            manifold_dynamic_colored_intervals(redu_dim_data_ISOMAP,marker,bin,int(time_len),region_name,redu_method='ISOMAP')
-        
+        '''
+        marker_start = marker['time_interval_left_end'].iloc[0]
+        marker_end = marker['time_interval_right_end'].iloc[-1]
+        data,time_len = population_spikecounts(neuron_id,marker_start,marker_end,30,bin)
+        data2pca_each_trail=data.T
+        redu_dim_data_ISOMAP=reduce_dimension_ISOMAP(data2pca_each_trail,0.1,region_name,stage='all_session')
+        manifold_dynamic_colored_intervals(redu_dim_data_ISOMAP,marker,bin,int(time_len),region_name,redu_method='ISOMAP')
+        '''
         ### manifold trial average
         run_time_dura,stop_time_dura=interval_cuttage(marker)
         run_average,stop_average=trail_average(data,run_time_dura,stop_time_dura)
@@ -933,21 +649,6 @@ def main_function(neurons,marker):
         stop2pca=stop_average.T
         stop_redu_dim_aver=reduce_dimension(stop2pca,0.1,region_name,stage='Stop')
         manifold_fixed(stop_redu_dim_aver,'Stop',region_name)
-        #manifold_dynamic(stop_redu_dim_aver,'Stop')
-        '''
-        ### manifold_distance
-        data2dis,time_len = population_spikecounts(neuron_id,marker_start,marker_end,30,0.1)
-        #高维距离,三维距离
-        normalized_data = normalize_fr(data2dis)#对原始firing rate进行normalize，以便于分析距离差异
-        high_dist,three_dist = manifold_center_distance(normalized_data,marker,region_name)
-        
-        high_dim_dist_all.append(high_dist)
-        three_dim_dist_all.append(three_dist)
+        #manifold_dynamic(stop_redu_dim_aver,'Stop')        
 
-    # manifold_distance
-    manifold_dist = {'region': neurons.columns.values, 'high_dim_dist': high_dim_dist_all,'three_dim_dist': three_dim_dist_all}
-    df = pd.DataFrame(manifold_dist)
-    df.to_csv(dis_save_path+f"/{mice}_manifold_run_stop_distance.csv", index=False)
-    
-
-main_function(neurons,treadmill)
+main(neurons,Marker)

@@ -38,7 +38,7 @@ LFP = np.load(data_path + "/LFP/LFP_npy/export.npy")
 if mannual_exclude_ch is not None and len(mannual_exclude_ch) > 0:
     LFP = np.delete(LFP, mannual_exclude_ch, axis=0)
 print(f"LFP shape: {LFP.shape}")
-print("Test if LFP duration same as marker duration...")
+print("Test if LFP duration same as motion duration...")
 print(f"LFP duration: {LFP.shape[1]/fs}")
 freq_low, freq_high = 0.5, 100
 
@@ -46,7 +46,7 @@ freq_low, freq_high = 0.5, 100
 start_time, end_time = 1335.6,1338.3  #marker["time_interval_right_end"].iloc[-1]
 '''
 # If you don't have marker file, you can exclude this
-marker = pd.read_csv(data_path + "/Marker/static_motion_segement.csv")
+marker = pd.read_csv(data_path + "/Marker/marker.csv")
 print(marker)
 print(f"Marker duration: {marker['time_interval_right_end'].iloc[-1]}")
 

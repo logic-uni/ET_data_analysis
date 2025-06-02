@@ -27,11 +27,11 @@ freq_low, freq_high = 0.5, 100
 fs = 30000  # 30 kHz for NP2
 marker_fs = 10593.2 # marker采样率
 LFP = np.load(data_path + "/LFP/LFP_npy/export.npy")
-motion_data = np.load(data_path + "/Marker/motion_marker.npy")
+motion_data = np.load(data_path + "/Marker/motion.npy")
 motion_data = motion_data[0]
-print("Test if LFP duration same as marker duration...")
+print("Test if LFP duration same as motion duration...")
 print(f"LFP duration: {LFP.shape[1]/fs} s")
-print(f"marker duration: {len(motion_data)/marker_fs} s")
+print(f"motion duration: {len(motion_data)/marker_fs} s")
 print(f"LFP shape: {LFP.shape}")
 
 def Grouped_to_get_real_LFP():

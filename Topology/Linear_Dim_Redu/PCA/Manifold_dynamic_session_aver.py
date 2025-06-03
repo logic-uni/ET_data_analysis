@@ -20,7 +20,6 @@ import quantities as pq
 from matplotlib.animation import FuncAnimation
 from sklearn.metrics import pairwise_distances
 from sklearn.manifold import Isomap
-from scipy.stats import pearsonr
 from sklearn.decomposition import PCA
 from elephant.conversion import BinnedSpikeTrain
 np.set_printoptions(threshold=np.inf)
@@ -29,7 +28,7 @@ np.set_printoptions(threshold=np.inf)
 data_path = '/data2/zhangyuhao/xinchao_data/Givenme/1410-1-tremor-Day3-3CVC-FM_g0'
 save_path = '/home/zhangyuhao/Desktop/Result/ET/Manifold/NP2/givenme/1410-1-tremor-Day3-3CVC-FM_g0'
 # ------- NO NEED CHANGE -------
-fr_bin = 100  #ms
+fr_bin = 10  #ms
 ### Behavior
 marker = pd.read_csv(data_path+'/Behavior/marker.csv') 
 print(marker)
@@ -77,8 +76,11 @@ def popu_fr_onetrial(neuron_ids,marker_start,marker_end):
     for j in range(len(neuron_ids)): #第j个neuron
         spike_times = singleneuron_spiketimes(neuron_ids[j])
         spike_times_trail = spike_times[(spike_times > marker_start) & (spike_times < marker_end)]
-        spiketrain = neo.SpikeTrain(spike_times_trail, units = 'sec', t_start = marker_start, t_stop = marker_end)
-        fr = BinnedSpikeTrain(spiketrain, bin_size = fr_bin*pq.ms, tolerance = None)
+        spiketrain = neo.SpikeTrain(spike_times_trail,
+                                    units = 'sec',
+                                    t_start = marker_start,
+                                    t_stop = marker_end)
+        fr = BinnedSpikeTrain(spiketrain, bin_size = fr_bin*pq.ms,tolerance = None)
         one_neruon = fr.to_array().astype(int)[0]
         if j == 0:
             neurons = one_neruon
@@ -86,97 +88,155 @@ def popu_fr_onetrial(neuron_ids,marker_start,marker_end):
             neurons = np.vstack((neurons, one_neruon))
     return neurons
 
-def normalize_fr(data2dis):
-    '''
-    #标准化方法1 z-score 会出现负值, PCA不适应报错
-    # 计算每行的均值和标准差
-    means = np.mean(data2dis, axis=1, keepdims=True)
-    stds = np.std(data2dis, axis=1, keepdims=True)
-    # 计算z-score
-    z_scores = (data2dis - means) / stds
-    '''
-    #标准化方法2 标准化到0-1
-    normalized_data = (data2dis - data2dis.min(axis=1, keepdims=True)) / (data2dis.max(axis=1, keepdims=True) - data2dis.min(axis=1, keepdims=True))
-    return normalized_data
+def adjust_array(arr):
+    if any(x < 0 for x in arr):
+        min_val = min(arr)
+        diff = -min_val
+        arr = [x + diff for x in arr]
+    return np.array(arr)
 
-def PCA_explained_var(rate,stage,dim): # extract linear structure
-    pca = PCA(n_components = dim)
+def oneDdynamic(count,bin_size,region_name): # 默认: 0.1 感觉改bin_size影响不大，改firing rate的bin size影响较大
+    #smooth data
+    count = pd.DataFrame(count)
+    rate = np.sqrt(count/bin_size)
+    #对数据做均值  默认: window=50  min_periods=1  感觉改这些值影响不大，改firing的bin size影响较大
+    rate = rate.rolling(window = 50,
+                        win_type = 'gaussian',
+                        center = True,
+                        min_periods = 1).mean(std=2)  # axis 无需输入默认0
+    #reduce dimension
+    '''
+    ## PCA
+    pca = PCA(n_components=1)
     X_pca = pca.fit_transform(rate.values)   #对应的是Explained variance
     explained_variance_ratio = pca.explained_variance_ratio_   #每个主成分所解释的方差比例
     explained_variance_sum = np.cumsum(explained_variance_ratio)  #计算累积解释方差比例
     #画explained_variance图
-    x = list(range(len(explained_variance_ratio)))
+    x=list(range(len(explained_variance_ratio)))
+    '''
+    fig = plt.figure()
+    X_isomap = Isomap(n_components = 1, n_neighbors = 21).fit_transform(rate.values)  #对应的是Residual variance
+
+    ### 原始降维到一维后的值随时间变化
+    # 小球距离曲线的偏移量
+    offset = 7
+    array = np.transpose(X_isomap)[0]
+    adjusted_array = adjust_array(array)
+    # 初始化动画
+    y = adjusted_array
+    x = np.arange(0,len(y))
+    fig, ax = plt.subplots()
+    line, = ax.plot(x, y, linestyle='-', color='b')
+    ball, = ax.plot([], [], marker='o', markersize=7, color='r')
+    # 设置图形界面属性
+    ax.set_xlim(np.min(x), np.max(x))
+    ax.set_ylim(np.min(y) - 1, np.max(y) + 1)
+    ax.set_title(f"{region_name}_dynamic_1D")
+    ax.set_xlabel("time")
+    ax.set_ylabel("neural state")
+    ax.grid(True)
+    # 更新函数，用于每一帧的更新
+    def update(frame):
+        ball_x = x[frame]
+        ball_y = y[frame] + offset  # 小球在曲线上方的位置偏移
+        ball.set_data([ball_x],[ball_y])
+        return line, ball,
+    # 创建动画
+    ani = FuncAnimation(fig, update, frames=len(x), interval=20, blit=True)
+    # 使用imagemagick将动画保存为GIF图片
+    ani.save(save_path+f"/1Ddynamic_{region_name}_dynamic_raw.gif", writer='pillow')
+
+    ### y=x^2 李雅普诺夫能量函数
+    # 小球距离曲线的偏移量
+    offset = 7
+    array = np.transpose(X_isomap)[0]
+    adjusted_array = adjust_array(array)
+    # 初始化动画
+    x = adjusted_array
+    y = x*x
+    fig, ax = plt.subplots()
+    line, = ax.plot(x, y, linestyle='-', color='b')
+    ball, = ax.plot([], [], marker='o', markersize=7, color='r')
+    # 设置图形界面属性
+    ax.set_xlim(np.min(x), np.max(x))
+    ax.set_ylim(np.min(y) - 1, np.max(y) + 1)
+    ax.set_title(f"{region_name}_dynamic_1D")
+    ax.set_xlabel("time")
+    ax.set_ylabel("neural energy")
+    ax.grid(True)
+    # 更新函数，用于每一帧的更新
+    def update(frame):
+        ball_x = x[frame]
+        ball_y = y[frame] + offset  # 小球在曲线上方的位置偏移
+        ball.set_data([ball_x], [ball_y])
+        return line, ball,
+    # 创建动画
+    ani = FuncAnimation(fig, update, frames=len(x), interval=20, blit=True)
+    # 使用imagemagick将动画保存为GIF图片
+    ani.save(save_path+f"/1Ddynamic_{region_name}_dynamic_x^2.gif", writer='pillow')
+
+def redu_dim(count,bin_size,region_name,stage): # 默认: 0.1 感觉改bin_size影响不大，改firing rate的bin size影响较大
+    #smooth data
+    count = pd.DataFrame(count)
+    rate = np.sqrt(count/bin_size)
+    #对数据做均值  默认: window=50  min_periods=1  感觉改这些值影响不大，改firing的bin size影响较大
+    rate = rate.rolling(window = 50,
+                        win_type = 'gaussian',
+                        center = True,
+                        min_periods = 1).mean(std=2)  # axis 无需输入默认0
+    #reduce dimension
+    ## PCA
+    pca = PCA(n_components = 3)
+    X_pca = pca.fit_transform(rate.values)   #对应的是Explained variance
+    #X_isomap = Isomap(n_components = 3, n_neighbors = 21).fit_transform(rate.values)  #对应的是Residual variance
+    #X_tsne = TSNE(n_components=3,random_state=21,perplexity=20).fit_transform(rate.values)  #t-SNE没有Explained variance，t-SNE 旨在保留局部结构而不是全局方差
+    explained_variance_ratio = pca.explained_variance_ratio_   #每个主成分所解释的方差比例
+    explained_variance_sum = np.cumsum(explained_variance_ratio)  #计算累积解释方差比例
+    #画explained_variance图
+    x=list(range(len(explained_variance_ratio)))
     plt.figure()
     plt.plot(x,explained_variance_ratio, color = 'b', label = 'each PC ratio')
     plt.plot(x,explained_variance_sum, color = 'r', label = 'ratio sum')
-    plt.title(f"{region}_{stage}_PC_explained variance ratio")
+    plt.title(f"{region_name}_{stage}_PC_explained variance ratio")
     plt.xlabel('PC')
     plt.ylabel('Value')
     plt.legend()
-    plt.savefig(save_path+f"/{region}_{stage}_PC_explained_var_ratio.png",dpi = 600,bbox_inches = 'tight')
+    plt.savefig(save_path+f"/{region_name}_{stage}_PC_explained_var_ratio.png",dpi = 600,bbox_inches = 'tight')
     plt.close()
     return X_pca
 
-def ISOMAP_residual_var(rate,stage,max_dim): # extract nolinear structure 
-    # Precompute geodesic distance once to optimize
-    isomap_base = Isomap(n_neighbors=21, n_components=max_dim)
-    D_geo = isomap_base.fit_transform(rate.values)
-    D_geo = pairwise_distances(D_geo)  # Geodesic distances
-
-    # Calculate residual variance for each dimension
-    dims = range(1, max_dim + 1)
-    residual_variances = []
-    for dim in dims:
-        # Compute low-dimensional embedding
-        isomap = Isomap(n_components=dim, n_neighbors=21)
-        X_embed = isomap.fit_transform(rate.values)
-        D_embed = pairwise_distances(X_embed)  # Euclidean distances in embedding
-
-        # Extract upper triangular distances (avoid diagonal & symmetry)
-        mask = np.triu_indices_from(D_geo, k=1)
-        d_geo_vals = D_geo[mask].ravel()
-        d_embed_vals = D_embed[mask].ravel()
-
-        # Remove inf/nan for valid correlation
-        valid_idx = ~(np.isinf(d_geo_vals) | np.isnan(d_geo_vals))
-        d_geo_vals = d_geo_vals[valid_idx]
-        d_embed_vals = d_embed_vals[valid_idx]
-
-        # Calculate Pearson R²
-        r, _ = pearsonr(d_geo_vals, d_embed_vals)
-        residual_variance = 1 - r**2
-        residual_variances.append(residual_variance)
-
-    # Plot residual variance vs dimension
-    plt.figure(figsize=(8, 5))
-    plt.plot(dims, residual_variances, 'o-', markersize=8)
-    plt.xticks(dims)
-    plt.xlabel('Embedding Dimension')
-    plt.ylabel('Residual Variance')
-    plt.title(f'Isomap Residual Variance: {region} {stage}')
-    plt.grid(alpha=0.3)
-    plt.savefig(f"{region}_{stage}_ResidualVariance.png", dpi=120)
-    plt.show()
-
-    # Return 3D embedding for further analysis (unchanged from original)
-    isomap_3d = Isomap(n_components=3, n_neighbors=21)
-    X_isomap = isomap_3d.fit_transform(rate.values)
-    return X_isomap
-
-def redu_dim(count,smooth_bin,stage): # 默认: 0.1 感觉改bin_size影响不大，改firing rate的bin size影响较大
+def redu_dim_ISOMAP(count,smooth_bin,region_name,stage): # extract nolinear structure # 默认: 0.1 感觉改bin_size影响不大，改firing rate的bin size影响较大
     #smooth data
     count = pd.DataFrame(count)
-    rate = np.sqrt(count / smooth_bin)
+    rate = np.sqrt(count/smooth_bin)
     #对数据做均值  默认: window=50  min_periods=1  感觉改这些值影响不大，改firing的bin size影响较大
-    rate = rate.rolling(
-        window=50, win_type='gaussian', center=True, min_periods=1
-    ).mean(std=2)
-    X_pca = PCA_explained_var(rate,stage,3)
-    X_isomap = ISOMAP_residual_var(rate,stage,3)
-    #X_tsne = TSNE(n_components=3,random_state=21,perplexity=20).fit_transform(rate.values)  #t-SNE没有Explained variance，t-SNE 旨在保留局部结构而不是全局方差
-    return X_pca,X_isomap
+    rate = rate.rolling(window = 50,
+                        win_type = 'gaussian',
+                        center = True,
+                        min_periods = 1).mean(std=2)   # axis 无需输入默认0
+    #reduce dimension
+    X_isomap = Isomap(n_components = 3, n_neighbors = 21).fit_transform(rate.values)  #对应的是Residual variance
+    X = rate.values
+    D_high = pairwise_distances(X, metric = 'euclidean')
+    residual_variances = []
+    # Calculate residual variance for different embedding dimensions
+    for n_components in range(1, 6):
+        isomap = Isomap(n_neighbors = 5, n_components = n_components)
+        X_low = isomap.fit_transform(X)
+        D_low = pairwise_distances(X_low, metric = 'euclidean')
+        residual_variance = 1 - np.sum((D_high - D_low) ** 2) / np.sum(D_high ** 2)
+        residual_variances.append(residual_variance)
+    # Plot residual variance
+    plt.figure()
+    plt.plot(range(1, 6), residual_variances, marker='o')
+    plt.xlabel('Number of Dimensions')
+    plt.ylabel('Residual Variance')
+    plt.title(f"{region_name}_{stage}_Isomap Residual Variance")
+    plt.savefig(save_path+f"/{region_name}_{stage}_Isomap_Residual_Var.png",dpi=600,bbox_inches = 'tight')
+    plt.close()
+    return X_isomap
 
-def Plot_color_trial(redu_dim_data,marker,redu_method):  #静态流形，时间区间颜色标记
+def manifold_color_trial(redu_dim_data,marker,region_name,redu_method):  #静态流形，时间区间颜色标记
     #colors = ['#ffcccc', '#ff6666', '#ff3333', '#cc0000'] #从浅红到深红的颜色列表，用于不同速度挡位画图区分
     #velocity_level=np.array(marker['velocity_level'][1::2])
     #分别单独画前三个PC
@@ -195,16 +255,16 @@ def Plot_color_trial(redu_dim_data,marker,redu_method):  #静态流形，时间�
                 q = q+1
             else:
                 plt.plot(x_stop,redu_dim_data[left:right,PC],color='blue')
-        plt.title(f"{region}_{redu_method}_manifold_colored_intervals_PC{PC+1}")
+        plt.title(f"{region_name}_{redu_method}_manifold_colored_intervals_PC{PC+1}")
         plt.xlabel("t")
-        plt.savefig(save_path+f"/{region}_{redu_method}_trials_PC{PC+1}.png",dpi=600,bbox_inches = 'tight')
+        plt.savefig(save_path+f"/{region_name}_{redu_method}_trials_PC{PC+1}.png",dpi=600,bbox_inches = 'tight')
         plt.close()
 
     #画三维manifold
     p = 0 # p控制颜色
     fig = plt.figure()
     ax = fig.add_subplot(projection = '3d')
-    ax.set_title(f"{region}_{redu_method}_manifold_colored_intervals")
+    ax.set_title(f"{region_name}_{redu_method}_manifold_colored_intervals")
     ax.set_xlabel("PC1")
     ax.set_ylabel("PC2")
     ax.set_zlabel("PC3")
@@ -223,10 +283,29 @@ def Plot_color_trial(redu_dim_data,marker,redu_method):  #静态流形，时间�
     ax.set_xlim([-0.2, 0.2])
     ax.set_ylim([-0.2, 0.2])
     ax.set_zlim([-0.2, 0.2])
-    plt.savefig(save_path+f"/{region}_{redu_method}_trials.png",dpi = 600,bbox_inches = 'tight')
+    plt.savefig(save_path+f"/{region_name}_{redu_method}_trials.png",dpi = 600,bbox_inches = 'tight')
     plt.close()
 
-
+def manifold_trial_aver(redu_dim_data,stage,region_name):  #静态流形，无时间区间颜色标记，用于trial_average，只需输入降维后的，无需marker
+    #分别单独画前三个PC
+    for i in range(0,3):
+        plt.figure()
+        plt.plot(redu_dim_data[:,i])
+        plt.title(f"{region_name}_{stage}_manifold_trail_average_PC{i+1}")
+        plt.xlabel("t")
+        plt.savefig(save_path+f"/{region_name}_{stage}_PC{i+1}_trail_average.png",dpi = 600,bbox_inches = 'tight')
+        plt.close()
+    
+    #画三维manifold
+    fig = plt.figure()
+    ax = fig.add_subplot(projection = '3d')
+    ax.plot3D(redu_dim_data[:,0],redu_dim_data[:,1],redu_dim_data[:,2],'blue')
+    ax.set_title(f"{region_name}_{stage}_manifold_trail_average")
+    ax.set_xlabel("PC1")
+    ax.set_ylabel("PC2")
+    ax.set_zlabel("PC3")
+    plt.savefig(save_path+f"/{region_name}_{stage}_trail_average.png",dpi = 600,bbox_inches = 'tight')
+    plt.close()
 
 def interval_cut(marker):
     run_during = np.array([])
@@ -295,50 +374,45 @@ def trail_aver(data,run_time_dura,stop_time_dura):
     stop_average = np.mean(stop, axis = 0)
     return run_average,stop_average
 
-def Plot_trial_aver(redu_dim_data,stage):  #静态流形，无时间区间颜色标记，用于trial_average，只需输入降维后的，无需marker
-    #分别单独画前三个PC
-    for i in range(0,3):
-        plt.figure()
-        plt.plot(redu_dim_data[:,i])
-        plt.title(f"{region}_{stage}_manifold_trail_average_PC{i+1}")
-        plt.xlabel("t")
-        plt.savefig(save_path+f"/{region}_{stage}_PC{i+1}_trail_average.png",dpi = 600,bbox_inches = 'tight')
-        plt.close()
-    
-    #画三维manifold
-    fig = plt.figure()
-    ax = fig.add_subplot(projection = '3d')
-    ax.plot3D(redu_dim_data[:,0],redu_dim_data[:,1],redu_dim_data[:,2],'blue')
-    ax.set_title(f"{region}_{stage}_manifold_trail_average")
-    ax.set_xlabel("PC1")
-    ax.set_ylabel("PC2")
-    ax.set_zlabel("PC3")
-    plt.savefig(save_path+f"/{region}_{stage}_trail_average.png",dpi = 600,bbox_inches = 'tight')
-    plt.close()
+def normalize_fr(data2dis):
+    '''
+    #标准化方法1 z-score 会出现负值, PCA不适应报错
+    # 计算每行的均值和标准差
+    means = np.mean(data2dis, axis=1, keepdims=True)
+    stds = np.std(data2dis, axis=1, keepdims=True)
+    # 计算z-score
+    z_scores = (data2dis - means) / stds
+    '''
+    #标准化方法2 标准化到0-1
+    normalized_data = (data2dis - data2dis.min(axis=1, keepdims=True)) / (data2dis.max(axis=1, keepdims=True) - data2dis.min(axis=1, keepdims=True))
+    return normalized_data
 
 def main():
     marker_start = marker['time_interval_left_end'].iloc[0]
     marker_end = marker['time_interval_right_end'].iloc[-1]
     data = popu_fr_onetrial(neuron_ids,marker_start,marker_end)
     data_norm = normalize_fr(data)
-    #oneDdynamic(data2pca,0.1)
-    ### each trail  # PCA & ISOMAP
+    ### 1d
+    #oneDdynamic(data2pca,0.1,region_name)
+    ### each trail
+    # PCA
     data2redu_trails = data_norm.T
-    X_pca,X_isomap = redu_dim(data2redu_trails,5,stage='trials')
-    Plot_color_trial(X_pca,marker,redu_method='PCA')
-    Plot_color_trial(X_isomap,marker,redu_method='ISOMAP')
+    redu_dim_data = redu_dim(data2redu_trails,5,region,stage='trials')
+    manifold_color_trial(redu_dim_data,marker,region,redu_method='PCA')
+    # ISOMAP 
+    redu_dim_data_ISOMAP = redu_dim_ISOMAP(data2redu_trails,1,region,stage='trials')
+    manifold_color_trial(redu_dim_data_ISOMAP,marker,region,redu_method='ISOMAP')
+    
     ### trial average
-    # Beacuse the time length of running or stopping is not the same, we need to cut the marker into equal intervals 30s
-    # Only select the time interval that is not less than 30s
+    # 由于运动和静止交替的持续时间随机 因此检测持续时间的最小长度 作为一个trail的长度 各个持续时间如果大于最小区间的X倍 按照X个trial计入
+    # 当然最小时间长度不得小于30s
     run_time_dura,stop_time_dura = interval_cut(marker)
-    # Align all the trials with same start point and end point
-    # our hyothesis is that the neural state is similar when motion transtion
     run_average,stop_average = trail_aver(data,run_time_dura,stop_time_dura)
-    run2redu_trialave = run_average.T
-    run_redu_dim_aver = redu_dim(run2redu_trialave,5,stage = 'Run_trial_average')
-    Plot_trial_aver(run_redu_dim_aver,'Run_trial_average')
-    stop2redu_trialave = stop_average.T
-    stop_redu_dim_aver = redu_dim(stop2redu_trialave,5,stage = 'Stop_trial_average')
-    Plot_trial_aver(stop_redu_dim_aver,'Stop_trial_average')
+    run2pca = run_average.T
+    run_redu_dim_aver = redu_dim(run2pca,0.1,region,stage = 'Run_trial_average')
+    manifold_trial_aver(run_redu_dim_aver,'Run_trial_average',region)
+    stop2pca = stop_average.T
+    stop_redu_dim_aver = redu_dim_ISOMAP(stop2pca,0.1,region,stage = 'Stop_trial_average')
+    manifold_trial_aver(stop_redu_dim_aver,'Stop_trial_average',region)
     
 main()

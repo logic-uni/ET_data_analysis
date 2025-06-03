@@ -250,6 +250,26 @@ def manifold_dynamic_colored_intervals(redu_dim_data,marker,time_len_int_aft_bin
     for m in range(end_inter_start,time_len_int_aft_bin):
         ax.plot3D(redu_dim_data[m:m+2,0],redu_dim_data[m:m+2,1],redu_dim_data[m:m+2,2],'blue')
 
+def ISOMAP_residual_var():
+    X = rate.values
+    D_high = pairwise_distances(X, metric = 'euclidean')
+    residual_variances = []
+    # Calculate residual variance for different embedding dimensions
+    for n_components in range(1, 6):
+        isomap = Isomap(n_neighbors = 5, n_components = n_components)
+        X_low = isomap.fit_transform(X)
+        D_low = pairwise_distances(X_low, metric = 'euclidean')
+        residual_variance = 1 - np.sum((D_high - D_low) ** 2) / np.sum(D_high ** 2)
+        residual_variances.append(residual_variance)
+    # Plot residual variance
+    plt.figure()
+    plt.plot(range(1, 6), residual_variances, marker='o')
+    plt.xlabel('Number of Dimensions')
+    plt.ylabel('Residual Variance')
+    plt.title(f"{region}_{stage}_Isomap Residual Variance")
+    plt.savefig(save_path+f"/{region}_{stage}_Isomap_Residual_Var.png",dpi=600,bbox_inches = 'tight')
+    plt.close()
+
 '''
 def manifold_fixed_colored_intervals(X_isomap,marker,time_len_int_aft_bin): 
     colors=[None] * time_len_int_aft_bin

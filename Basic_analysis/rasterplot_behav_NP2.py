@@ -10,32 +10,46 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 np.set_printoptions(threshold=np.inf)
 
-mice_name = '20250310_VN_tremor'
-segment = 15 # unit s
+# ------- NEED CHANGE -------
+data_path = '/data2/zhangyuhao/xinchao_data/Givenme/1670-2-tremor-Day5-bank_4CVC-FM_g0'
+save_path = "/home/zhangyuhao/Desktop/Result/ET/Rasterplot/NP2/givenme/1670-2-tremor-Day5-bank_4CVC-FM_g0"
+segment = 10 # unit s
+# ------- NO NEED CHANGE -------
+### Behavior
+motion_fs = 10593.2 # loadcell sample rate
+motion_data = np.load(data_path + '/Behavior/motion.npy')
+motion_data = motion_data[0]
+behav_length = motion_data.shape[0] / motion_fs
 
-# --- NO NEED CHANGE ---
-main_path = f"/data1/zhangyuhao/xinchao_data/NP2/{mice_name}/"
-save_path = f"/home/zhangyuhao/Desktop/Result/ET/RasterPlot/{mice_name}/special_isi_neurons/"  # all_neurons  selected_neurons  special_isi_neurons
-
-# --------- Main Program ----------
-# behavior
-loadcell_sp_rate = 10593.2 # loadcell sample rate
-loadcell = np.load(main_path + '/Marker/motion_marker.npy')
-loadcell = loadcell[0]
-# electrophysiology
-ephys_sp_rate = 30000 #spikeGLX neuropixel sample rate
-identities = np.load(main_path + '/Sorted/spike_clusters.npy') # time series: unit id of each spike
-times = np.load(main_path + '/Sorted/spike_times.npy')  # time series: spike time of each spike
-neurons = pd.read_csv(main_path + '/Sorted/cluster_group.tsv', sep='\t')  
+### Electrophysiology
+ephys_fs = 30000 #spikeGLX neuropixel sample rate
+identities = np.load(data_path + '/Sorted/kilosort4/spike_clusters.npy') # time series: unit id of each spike
+times = np.load(data_path + '/Sorted/kilosort4/spike_times.npy')  # time series: spike time of each spike
+neurons = pd.read_csv(data_path + '/Sorted/kilosort4/cluster_group.tsv', sep='\t')  
 print(neurons)
-print("Test if electrophysiology duration is equal to treadmill duration ...")
-elec_length = times[-1] / ephys_sp_rate
-behav_length = loadcell.shape[0] / loadcell_sp_rate
+elec_length = times[-1] / ephys_fs
 print(f"Electrophysiology duration: {elec_length}")
-print(f"Loadcell duration: {behav_length}")
+print(f"Behavior duration: {behav_length}")
 
-#popu_ids = neurons['cluster_id'].to_numpy()
-popu_ids = np.array([4,5])
+region = 'DCN'  # 感兴趣的region
+'''
+## Load neuron id: For single region
+popu_ids = neurons['cluster_id'].to_numpy()
+'''
+## Load neuron id: For across region
+neuron_info = pd.read_csv(data_path+'/Sorted/kilosort4/mapping_artifi.csv') 
+#neurons = pd.read_csv(data_path+'/Sorted/kilosort4/mapping_artifi_QC.csv') 
+#neurons = neuron_info[neuron_info['fr'] > fr_filter]
+region_groups = neuron_info.groupby('region')
+region_neuron_ids = {}
+for reg, group in region_groups:
+    # 提取每组的第一列（cluster_id），去除缺失值
+    cluster_ids = group.iloc[:, 0].dropna().astype(int).values
+    region_neuron_ids[reg] = cluster_ids
+
+popu_ids = region_neuron_ids[region]  # 获取该region的neuron_ids
+popu_ids = np.sort(popu_ids)
+print(popu_ids.shape)
 
 #### spike train & firing rates
 # get single neuron spike train
@@ -45,7 +59,7 @@ def singleneuron_spiketimes(id):
     spike_times=np.zeros(len(y))
     for i in range(0,len(y)):
         z=y[i]
-        spike_times[i]=times[z]/ephys_sp_rate
+        spike_times[i]=times[z]/ephys_fs
     return spike_times
 
 # plot single neuron spike train
@@ -62,24 +76,25 @@ def Rasterp_popu_behav(spike_times, start_time, end_time):
     # 创建画布和子图 gridspec 控制子图高度比例
     # if all neurons, set figsize=(35, 25) 'height_ratios': [5, 1]}
     # if selected neurons, set figsize=(35,10) 'height_ratios': [3, 1]}
-    fig, (ax1, ax2) = plt.subplots(2, 1, gridspec_kw={'height_ratios': [3, 1]}, figsize=(35,10))  
+    fig, (ax1, ax2) = plt.subplots(2, 1, gridspec_kw={'height_ratios': [7, 1]}, figsize=(35,15), constrained_layout=True)
     nu_num = len(spike_times)
     for i in range(0, nu_num):
-        ax1.plot(spike_times[i], np.repeat(i, len(spike_times[i])), '|', color='gray')
-    ax1.set_yticks(np.arange(0,nu_num,1))
-    ax1.set_xticks(np.arange(0,segment+1,5))
-    ax1.set_title(f'Spike Train {start_time} - {end_time}') 
-    ax1.set_xlabel("Time (s)")
-    ax1.set_ylabel("Neurons")
+        ax1.plot(spike_times[i], np.repeat(popu_ids[i], len(spike_times[i])), '|', color='gray')
 
-    start_sample = int(start_time * loadcell_sp_rate)
-    end_sample = int(end_time * loadcell_sp_rate)
+    ax1.set_yticks(popu_ids)
+    ax1.set_xticks(np.arange(0,segment+1,5))
+    ax1.set_title(f'{region}_Spike Train {start_time} - {end_time}') 
+    ax1.set_xlabel("Time (s)")
+    ax1.set_ylabel("Neuron_id")
+
+    start_sample = int(start_time * motion_fs)
+    end_sample = int(end_time * motion_fs)
     time_axis = np.linspace(0, segment, end_sample - start_sample)  # 创建实际时间坐标
-    ax2.plot(time_axis,loadcell[int(start_time*loadcell_sp_rate):int(end_time*loadcell_sp_rate)])  # 没动就是平的，动了才会变化，向上向下分别代表压力传感器的方向
+    ax2.plot(time_axis,motion_data[int(start_time*motion_fs):int(end_time*motion_fs)])  # 没动就是平的，动了才会变化，向上向下分别代表压力传感器的方向
     ax2.set_yticks([])
     ax2.set_xlabel('Time (s)')
     plt.tight_layout()
-    plt.savefig(f"{save_path}/{start_time}-{end_time}.png", dpi=300,bbox_inches='tight')
+    plt.savefig(f"{save_path}/{region}_{start_time}-{end_time}s.png", dpi=300,bbox_inches='tight')
     plt.close()
 
 # PETH: peri-event time histogram  事件周围时间直方图
@@ -173,7 +188,8 @@ def PETH_heatmap_shorttime(data,id):
 def popu_sptime_trial(neuron_ids,start,end):
     popu_sptime = []
     for j in range(len(neuron_ids)): #第j个neuron
-        spike_times = singleneuron_spiketimes(neuron_ids[j])
+        neuron_id = neuron_ids[j]
+        spike_times = singleneuron_spiketimes(neuron_id)
         spike_times_trail = spike_times[(spike_times > start) & (spike_times < end)]
         align_nu_times = spike_times_trail - start
         popu_sptime.append(align_nu_times)
@@ -184,6 +200,7 @@ def main():
     for start in range(0, trunc, segment):
         end = start + segment
         spike_times = popu_sptime_trial(popu_ids,start,end)  # start,end unit s
+        #ReorgnizebyDep()
         Rasterp_popu_behav(spike_times,start,end)
 
 main()

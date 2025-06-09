@@ -14,22 +14,44 @@ np.set_printoptions(threshold=np.inf)
 np.seterr(divide='ignore',invalid='ignore')
 
 # ------- NEED CHANGE -------
-data_path = '/data2/zhangyuhao/xinchao_data/test/headtremor/Mice_1411_1/20250104_headtremor_Mice_1411_1_CBN_VN_shank1_2_freely_moving'
-save_path = "/home/zhangyuhao/Desktop/Result/ET/ISI/NP2/givenme/1423_15_control-Day1-1CVC-FM_g0"
+data_path = '/data2/zhangyuhao/xinchao_data/Givenme/1670-2-tremor-Day5-bank_4CVC-FM_g0'
+save_path = "/home/zhangyuhao/Desktop/Result/ET/ISI/NP2/givenme/1670-2-tremor-Day5-bank_4CVC-FM_g0"
+trial_interval = 40 # unit s
+fr_filter = 30          
 # ------- NO NEED CHANGE -------
 type2_threshold = 0.2
-fr_filter = 2                # 1  firing rate > 1
-cutoff_distr = 80           # 250ms/None  cutoff_distr=0.25代表截断ISI分布大于0.25s的
+cutofdis_max = 250           # 250ms/None  cutoff_distr=0.25代表截断ISI分布大于0.25s的
+cutofdis_min = 0.001
 histo_bin_num = 100          # 统计图bin的个数
 ### electrophysiology
 fs = 30000 #spikeGLX neuropixel sample rate
 identities = np.load(data_path + '/Sorted/kilosort4/spike_clusters.npy') # time series: unit id of each spike
 times = np.load(data_path + '/Sorted/kilosort4/spike_times.npy')  # time series: spike time of each spike
 #neurons = pd.read_csv(data_path + "/filtered_quality_metrics.csv")  # QC neurons
-neurons = pd.read_csv(data_path + '/Sorted/kilosort4/cluster_group.tsv', sep='\t')  
-print(neurons)
 elec_dura = times[-1] / fs
-print(elec_dura)
+print(f"Electrophysiology duration: {elec_dura}")
+
+region = 'DCN'  # 感兴趣的region
+'''
+## Load neuron id: For single region
+neuron_info = pd.read_csv(data_path + "/quality_metrics.csv")
+neurons = neuron_info[neuron_info['firing_rate'] > fr_filter]
+print(neurons)
+popu_ids = neurons['cluster_id'].to_numpy()
+'''
+## Load neuron id: For across region
+neuron_info = pd.read_csv(data_path+'/Sorted/kilosort4/mapping_artifi.csv') 
+#neurons = pd.read_csv(data_path+'/Sorted/kilosort4/mapping_artifi_QC.csv') 
+neurons = neuron_info[neuron_info['fr'] > fr_filter]
+region_groups = neurons.groupby('region')
+region_neuron_ids = {}
+for reg, group in region_groups:
+    # 提取每组的第一列（cluster_id），去除缺失值
+    cluster_ids = group.iloc[:, 0].dropna().astype(int).values
+    region_neuron_ids[reg] = cluster_ids
+
+popu_ids = region_neuron_ids[region]  # 获取该region的neuron_ids
+print(popu_ids.shape)
 
 # ------- Main Program -------
 # get single neuron spike train
@@ -102,45 +124,46 @@ def classify_isi_distribution(intervals, bin_num=100):
 
     return not is_poisson
 
-def ISI_counting(unit_id):
-    spike_times = singleneuron_spiketimes(unit_id)
+def ISI_counting(spike_times,unit_id,trialnum):
     intervals = np.array([])
     is_non_poisson = None
-    
-    if len(spike_times) > (fr_filter * elec_dura):
-        mark = 1
-        intervals = np.diff(spike_times) * 1000  #单位换算
-        intervals = intervals[(intervals > 0.001) & (intervals <= cutoff_distr)]
-        if len(intervals) > 0:
-            # 分类判断
-            is_non_poisson = classify_isi_distribution(intervals)
-
-           # 增强可视化：标注所有统计量
-            plt.hist(intervals, bins=histo_bin_num, range=(0, 80), alpha=0.6)
-            stats_text = f"skew={skew(intervals):.2f}\nkurtosis={kurtosis(intervals):.2f}"
-            plt.title(f'unit {unit_id} - {"Non-Poisson" if is_non_poisson else "Poisson"}\n{stats_text}')
-            plt.savefig(f"{save_path}/neuron_id_{unit_id}.png", dpi=600, bbox_inches='tight')
-            plt.clf()
-
+    intervals = np.diff(spike_times) * 1000  #单位换算
+    intervals = intervals[(intervals > cutofdis_min) & (intervals <= cutofdis_max)]
+    if len(intervals) > 0:
+        # 分类判断
+        is_non_poisson = classify_isi_distribution(intervals)
+        plt.hist(intervals, bins=histo_bin_num,range = (cutofdis_min,cutofdis_max), alpha=0.6)
+        stats_text = f"skew={skew(intervals):.2f}\nkurtosis={kurtosis(intervals):.2f}"
+        plt.xlabel('Inter-spike Interval (ms)')
+        plt.ylabel('Counts')
+        plt.title(f'unit {unit_id} - {"Non-Poisson" if is_non_poisson else "Poisson"}\n{stats_text}')
+        plt.savefig(f"{save_path}/neuronid_{unit_id}_truncate_{trialnum}.png", dpi=600, bbox_inches='tight')
+        plt.clf()
     return is_non_poisson
 
-def neurons_ISI_counting(units):
+def neurons_ISI_counting():
     non_poisson_count = 0
     total_processed = 0
+    trunc_num = int(elec_dura // trial_interval)
+    print(trunc_num)
     plt.figure(figsize=(10, 6))
-    for index, row in units.iterrows():
-        unit_id = row['cluster_id']
-        result = ISI_counting(unit_id)
-        if result is not None:
-            total_processed += 1
-            if result:
-                non_poisson_count += 1
+    for neuron_id in popu_ids: #第j个neuron
+        spike_times = singleneuron_spiketimes(neuron_id)
+        for trial_num in range(0,trunc_num):
+            start = trial_num * trial_interval
+            end = (trial_num + 1) * trial_interval
+            trunc_sptimes = spike_times[(spike_times > start) & (spike_times < end)]
+            result = ISI_counting(trunc_sptimes,neuron_id,trial_num)
+            if result is not None:
+                total_processed += 1
+                if result:
+                    non_poisson_count += 1
     
     print(f"非泊松神经元比例: {non_poisson_count}/{total_processed} ({non_poisson_count/total_processed:.1%})")
     with open(f"{save_path}/non_poisson_ratio.txt", "w") as f:
         f.write(f"非泊松神经元比例: {non_poisson_count}/{total_processed} ({non_poisson_count/total_processed:.1%})\n")
 
-neurons_ISI_counting(neurons)
+neurons_ISI_counting()
 
 #each_neuron_ISI(neurons)
 #save_selected_neuron_spike_times(189)

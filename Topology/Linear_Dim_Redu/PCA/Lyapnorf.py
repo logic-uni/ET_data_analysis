@@ -1,4 +1,4 @@
-
+from matplotlib.animation import FuncAnimation
 def adjust_array(arr):
     if any(x < 0 for x in arr):
         min_val = min(arr)

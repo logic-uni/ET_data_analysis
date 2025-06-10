@@ -31,7 +31,7 @@ times = np.load(data_path + '/Sorted/kilosort4/spike_times.npy')  # time series:
 elec_dura = times[-1] / fs
 print(f"Electrophysiology duration: {elec_dura}")
 
-region = 'DCN'  # 感兴趣的region
+region = 'CbX'  # 感兴趣的region
 '''
 ## Load neuron id: For single region
 neuron_info = pd.read_csv(data_path + "/quality_metrics.csv")
@@ -40,9 +40,9 @@ print(neurons)
 popu_ids = neurons['cluster_id'].to_numpy()
 '''
 ## Load neuron id: For across region
-neuron_info = pd.read_csv(data_path+'/Sorted/kilosort4/mapping_artifi.csv') 
+neurons = pd.read_csv(data_path+'/Sorted/kilosort4/mapping_artifi.csv') 
 #neurons = pd.read_csv(data_path+'/Sorted/kilosort4/mapping_artifi_QC.csv') 
-neurons = neuron_info[neuron_info['fr'] > fr_filter]
+#neurons = neurons[neurons['fr'] > fr_filter]
 region_groups = neurons.groupby('region')
 region_neuron_ids = {}
 for reg, group in region_groups:
@@ -124,7 +124,7 @@ def classify_isi_distribution(intervals, bin_num=100):
 
     return not is_poisson
 
-def ISI_counting(spike_times,unit_id,trialnum):
+def ISI_counting(spike_times,unit_id,trialnum=None):
     intervals = np.array([])
     is_non_poisson = None
     intervals = np.diff(spike_times) * 1000  #单位换算
@@ -141,7 +141,7 @@ def ISI_counting(spike_times,unit_id,trialnum):
         plt.clf()
     return is_non_poisson
 
-def neurons_ISI_counting():
+def neurons_ISI_counting_trunc():
     non_poisson_count = 0
     total_processed = 0
     trunc_num = int(elec_dura // trial_interval)
@@ -158,6 +158,22 @@ def neurons_ISI_counting():
                 total_processed += 1
                 if result:
                     non_poisson_count += 1
+    
+    print(f"非泊松神经元比例: {non_poisson_count}/{total_processed} ({non_poisson_count/total_processed:.1%})")
+    with open(f"{save_path}/non_poisson_ratio.txt", "w") as f:
+        f.write(f"非泊松神经元比例: {non_poisson_count}/{total_processed} ({non_poisson_count/total_processed:.1%})\n")
+
+def neurons_ISI_counting():
+    non_poisson_count = 0
+    total_processed = 0
+    plt.figure(figsize=(10, 6))
+    for neuron_id in popu_ids: #第j个neuron
+        spike_times = singleneuron_spiketimes(neuron_id)
+        result = ISI_counting(spike_times,neuron_id)
+        if result is not None:
+            total_processed += 1
+            if result:
+                non_poisson_count += 1
     
     print(f"非泊松神经元比例: {non_poisson_count}/{total_processed} ({non_poisson_count/total_processed:.1%})")
     with open(f"{save_path}/non_poisson_ratio.txt", "w") as f:

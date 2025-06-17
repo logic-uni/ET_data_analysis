@@ -11,9 +11,9 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 np.set_printoptions(threshold=np.inf)
 
 # ------- NEED CHANGE -------
-data_path = '/data2/zhangyuhao/xinchao_data/Givenme/1670-2-tremor-Day5-bank_4CVC-FM_g0'
-save_path = "/home/zhangyuhao/Desktop/Result/ET/Rasterplot/NP2/givenme/1670-2-tremor-Day5-bank_4CVC-FM_g0"
-segment = 50 # unit s
+data_path = '/data2/zhangyuhao/xinchao_data/Givenme/1410-1-tremor-Day3-3CVC-FM_g0'
+save_path = "/home/zhangyuhao/Desktop/Result/ET/Rasterplot/NP2/givenme/1410-1-tremor-Day3-3CVC-FM_g0"
+segment = 10 # unit s
 # ------- NO NEED CHANGE -------
 ### Behavior
 motion_fs = 10593.2 # loadcell sample rate
@@ -35,7 +35,7 @@ region = 'CbX'  # 感兴趣的region
 '''
 ## Load neuron id: For single region
 popu_ids = neurons['cluster_id'].to_numpy()
-
+'''
 ## Load neuron id: For across region
 neuron_info = pd.read_csv(data_path+'/Sorted/kilosort4/mapping_artifi.csv') 
 #neurons = pd.read_csv(data_path+'/Sorted/kilosort4/mapping_artifi_QC.csv') 
@@ -50,8 +50,8 @@ for reg, group in region_groups:
 popu_ids = region_neuron_ids[region]  # 获取该region的neuron_ids
 popu_ids = np.sort(popu_ids)
 print(popu_ids.shape)
-'''
-popu_ids = np.array([136,147,164])
+
+#popu_ids = np.array([136,147,164])
 #### spike train & firing rates
 # get single neuron spike train
 def singleneuron_spiketimes(id):

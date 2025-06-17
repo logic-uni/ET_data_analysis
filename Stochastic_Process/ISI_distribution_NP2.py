@@ -14,13 +14,13 @@ np.set_printoptions(threshold=np.inf)
 np.seterr(divide='ignore',invalid='ignore')
 
 # ------- NEED CHANGE -------
-data_path = '/data2/zhangyuhao/xinchao_data/Givenme/1670-2-tremor-Day5-bank_4CVC-FM_g0'
-save_path = "/home/zhangyuhao/Desktop/Result/ET/ISI/NP2/givenme/1670-2-tremor-Day5-bank_4CVC-FM_g0"
+data_path = '/data1/zhangyuhao/xinchao_data/NP2/test/control/Mice_1411_3/20250110_control_Mice_1411_3_t2d_shank1_freely_moving'
+save_path = "/home/zhangyuhao/Desktop/Result/ET/ISI/NP2/test/control/Mice_1411_3/20250110_control_Mice_1411_3_t2d_shank1_freely_moving"
 trial_interval = 40 # unit s
-fr_filter = 30          
+fr_filter = 0.2          
 # ------- NO NEED CHANGE -------
 type2_threshold = 0.2
-cutofdis_max = 250           # 250ms/None  cutoff_distr=0.25代表截断ISI分布大于0.25s的
+cutofdis_max = 150           # 250ms/None  cutoff_distr=0.25代表截断ISI分布大于0.25s的
 cutofdis_min = 0.001
 histo_bin_num = 100          # 统计图bin的个数
 ### electrophysiology
@@ -137,7 +137,7 @@ def ISI_counting(spike_times,unit_id,trialnum=None):
         plt.xlabel('Inter-spike Interval (ms)')
         plt.ylabel('Counts')
         plt.title(f'unit {unit_id} - {"Non-Poisson" if is_non_poisson else "Poisson"}\n{stats_text}')
-        plt.savefig(f"{save_path}/neuronid_{unit_id}_truncate_{trialnum}.png", dpi=600, bbox_inches='tight')
+        plt.savefig(f"{save_path}/{region}_neuronid_{unit_id}_truncate_{trialnum}.png", dpi=600, bbox_inches='tight')
         plt.clf()
     return is_non_poisson
 
